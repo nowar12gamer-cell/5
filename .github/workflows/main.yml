@@ -20,16 +20,16 @@ jobs:
           $password = "admin@123"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
-          if (-not (Get-LocalUser -Name "AbdullahRobloxprogrammer" -ErrorAction SilentlyContinue)) {
-              New-LocalUser -Name "AbdullahRobloxprogrammer" -Password $securePass -AccountNeverExpires
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires
           }
 
-          Add-LocalGroupMember -Group "Administrators" -Member "AbdullahRobloxprogrammer"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "AbdullahRobloxprogrammer"
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
 
-          echo "RDP_CREDS=User: AbdullahRobloxprogrammer | Password: $password" >> $env:GITHUB_ENV
+          echo "RDP_CREDS=User: TOOLBOXLAP | Password: $password" >> $env:GITHUB_ENV
 
-          if (-not (Get-LocalUser -Name "AbdullahRobloxprogrammer")) {
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP")) {
               Write-Error "User creation failed"
               exit 1
           }
@@ -73,11 +73,10 @@ jobs:
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: AbdullahRobloxprogrammer"
+          Write-Host "Username: TOOLBOXLAP"
           Write-Host "Password: admin@123"
           Write-Host "==================`n"
           while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
-          }leep -Seconds 300
           }
