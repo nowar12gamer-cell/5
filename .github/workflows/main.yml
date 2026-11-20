@@ -1,61 +1,95 @@
-name: macOS-VNC
+name: Windows-RDP-Pretty
 on:
   workflow_dispatch:
 
 jobs:
-  mac-vnc:
-    runs-on: macos-latest
+  rdp:
+    runs-on: windows-latest
     timeout-minutes: 360   # الحد الأقصى في GitHub هو 6 ساعات
     steps:
-      - name: Set user password
+      - name: Enable RDP and set password
         env:
-          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          # كلمة سر VNC لازم تكون 8 حروف أو أقل
-          sudo dscl . -passwd /Users/runner "$VNC_PASSWORD"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+          # نستخدم المستخدم الأساسي runneradmin عشان الشكل يتطبق على بروفايله
+          net user runneradmin "$env:RDP_PASSWORD"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin" -ErrorAction SilentlyContinue
 
-      - name: Enable Screen Sharing (VNC)
-        env:
-          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
+      - name: Make it look modern
         run: |
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -clientopts -setvnclegacy -vnclegacy yes \
-            -clientopts -setvncpw -vncpw "$VNC_PASSWORD" \
-            -restart -agent -privs -all
+          # الوضع الداكن
+          $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+          New-Item -Path $p -Force | Out-Null
+          Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
+          Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
+
+          # إظهار أيقونات سطح المكتب (This PC / User Files)
+          $icons = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
+          New-Item -Path $icons -Force | Out-Null
+          Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
+          Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
+
+          # إظهار امتدادات الملفات والملفات المخفية
+          $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+          Set-ItemProperty -Path $adv -Name HideFileExt -Value 0
+          Set-ItemProperty -Path $adv -Name Hidden -Value 1
+
+          # خلفية متدرجة
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap 1920,1080
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $rect = New-Object System.Drawing.Rectangle 0,0,1920,1080
+          $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, [System.Drawing.Color]::FromArgb(15,23,42), [System.Drawing.Color]::FromArgb(79,70,229), 45)
+          $g.FillRectangle($brush, $rect)
+          $wall = "$env:USERPROFILE\wallpaper.png"
+          $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Png)
+          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wall
+          Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d); }'
+          [W]::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
+
+          # ClearType وخطوط ناعمة
+          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
+
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+
+      - name: Install apps
+        run: |
+          choco install googlechrome vscode 7zip vlc notepadplusplus git -y --no-progress
 
       - name: Install Tailscale
         run: |
-          brew install tailscale
-          sudo brew services start tailscale
-          sleep 5
+          $installer = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $installer
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installer`"", "/quiet", "/norestart" -Wait
 
       - name: Connect Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="gh-mac-$GITHUB_RUN_ID"
-          for i in $(seq 1 10); do
-            TS_IP=$(tailscale ip -4 2>/dev/null || true)
-            [ -n "$TS_IP" ] && break
-            sleep 5
-          done
-          if [ -z "$TS_IP" ]; then
-            echo "Tailscale IP not assigned"; exit 1
-          fi
-          echo "TAILSCALE_IP=$TS_IP" >> "$GITHUB_ENV"
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          & $ts up --authkey=$env:TS_AUTHKEY --hostname="gh-win-$env:GITHUB_RUN_ID"
+          $ip = $null
+          for ($i = 0; $i -lt 10 -and -not $ip; $i++) {
+              $ip = & $ts ip -4
+              if (-not $ip) { Start-Sleep -Seconds 5 }
+          }
+          if (-not $ip) { Write-Error "No Tailscale IP"; exit 1 }
+          "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
       - name: Show connection info
         run: |
-          echo "=== VNC ACCESS ==="
-          echo "Address:  $TAILSCALE_IP  (port 5900)"
-          echo "Username: runner"
-          echo "Password: the VNC_PASSWORD secret"
-          echo "=================="
+          Write-Host "=== RDP ACCESS ==="
+          Write-Host "Address:  $env:TAILSCALE_IP"
+          Write-Host "Username: runneradmin"
+          Write-Host "Password: the RDP_PASSWORD secret"
+          Write-Host "=================="
 
       - name: Keep alive
         run: |
-          while true; do
-            echo "[$(date)] VNC active"
-            sleep 300
-          done
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP active"
+              Start-Sleep -Seconds 300
+          }
