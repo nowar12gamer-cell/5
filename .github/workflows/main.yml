@@ -90,32 +90,6 @@ jobs:
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 
-      - name: Install apps and Roblox Studio
-        shell: pwsh
-        run: |
-          # 1. تثبيت البرامج الأساسية وأدوات البرمجة عبر Chocolatey
-          choco install googlechrome vscode git nodejs-lts python 7zip notepadplusplus -y --no-progress
-
-          # 2. تحميل وتثبيت Roblox Studio
-          Write-Host "Downloading Roblox Studio..."
-          $robloxInstaller = "$env:TEMP\RobloxStudioInstaller.exe"
-          Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" -OutFile $robloxInstaller
-          Start-Process -FilePath $robloxInstaller -ArgumentList "-install" -Wait -ErrorAction SilentlyContinue
-
-          # 3. إنشاء اختصارات ChatGPT و Gemini على سطح المكتب لفتحها كتطبيقات
-          $WshShell = New-Object -comObject WScript.Shell
-          $Desktop = [System.Environment]::GetFolderPath('Desktop')
-
-          $ChatGPT = $WshShell.CreateShortcut("$Desktop\ChatGPT.lnk")
-          $ChatGPT.TargetPath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-          $ChatGPT.Arguments = "--app=https://chatgpt.com"
-          $ChatGPT.Save()
-
-          $Gemini = $WshShell.CreateShortcut("$Desktop\Gemini.lnk")
-          $Gemini.TargetPath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-          $Gemini.Arguments = "--app=https://gemini.google.com"
-          $Gemini.Save()
-
       - name: Show connection info
         shell: pwsh
         run: |
