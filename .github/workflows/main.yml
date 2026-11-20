@@ -1,57 +1,82 @@
-name: Windows 11 VM
-
+name: RDP
 on:
   workflow_dispatch:
-
 jobs:
-  windows-11:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-
+  secure-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
     steps:
-      - name: Check virtualization support
-        shell: bash
+      - name: Configure Core RDP Settings
         run: |
-          echo "Checking host virtualization support..."
-          if [ -e /dev/kvm ]; then
-            echo "KVM is available."
-          else
-            echo "KVM is not available on this runner."
-            exit 1
-          fi
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
 
-      - name: Install virtualization tools
-        shell: bash
+      - name: Create RDP User with Static Password
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-kvm qemu-utils
+          $password = "admin@123"
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
-      - name: Show QEMU version
-        shell: bash
-        run: |
-          qemu-system-x86_64 --version
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue)) {
+              New-LocalUser -Name "TOOLBOXLAP" -Password $securePass -AccountNeverExpires
+          }
 
-      - name: Prepare VM directory
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/windows11"
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
 
-      - name: Create Windows 11 disk
-        shell: bash
-        run: |
-          qemu-img create -f qcow2 "$RUNNER_TEMP/windows11/windows11.qcow2" 64G
+          echo "RDP_CREDS=User: TOOLBOXLAP | Password: $password" >> $env:GITHUB_ENV
 
-      - name: VM information
-        shell: bash
-        run: |
-          echo "Windows 11 VM disk created."
-          echo "A licensed Windows 11 installation ISO is required."
-          echo "Place/provide your own Windows 11 ISO through an appropriate private artifact or storage workflow."
-          echo "This workflow does not download or redistribute Windows."
+          if (-not (Get-LocalUser -Name "TOOLBOXLAP")) {
+              Write-Error "User creation failed"
+              exit 1
+          }
 
-      - name: Start VM placeholder
-        shell: bash
+      - name: Install Tailscale
         run: |
-          echo "VM storage is ready."
-          echo "To boot Windows 11, attach your own Windows 11 ISO and configure the required UEFI/TPM/Secure Boot devices."
-          echo "The GitHub-hosted runner will be removed when the job ends."
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP not assigned. Exiting."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "TCP connection to RDP port 3389 failed"
+              exit 1
+          }
+          Write-Host "TCP connectivity successful!"
+
+      - name: Maintain Connection
+        run: |
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: TOOLBOXLAP"
+          Write-Host "Password: admin@123"
+          Write-Host "==================`n"
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Start-Sleep -Seconds 300
+          }
