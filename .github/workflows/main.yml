@@ -2,42 +2,40 @@ name: Windows-RDP-Pretty
 on:
   workflow_dispatch:
 
+env:
+  # يستخدم السر RDP_PASSWORD لو موجود، وإلا يستخدم الكلمة المكتوبة هنا
+  RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Rk7#vQm2!xLp9@Wd' }}
+
 jobs:
   rdp:
     runs-on: windows-latest
     timeout-minutes: 360   # الحد الأقصى في GitHub هو 6 ساعات
     steps:
       - name: Enable RDP and set password
-        env:
-          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
-          # نستخدم المستخدم الأساسي runneradmin عشان الشكل يتطبق على بروفايله
           net user runneradmin "$env:RDP_PASSWORD"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Password was rejected"; exit 1 }
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin" -ErrorAction SilentlyContinue
 
       - name: Make it look modern
         run: |
-          # الوضع الداكن
           $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
           New-Item -Path $p -Force | Out-Null
           Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
           Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
 
-          # إظهار أيقونات سطح المكتب (This PC / User Files)
           $icons = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
           New-Item -Path $icons -Force | Out-Null
           Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
           Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
 
-          # إظهار امتدادات الملفات والملفات المخفية
           $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
           Set-ItemProperty -Path $adv -Name HideFileExt -Value 0
           Set-ItemProperty -Path $adv -Name Hidden -Value 1
 
-          # خلفية متدرجة
           Add-Type -AssemblyName System.Drawing
           $bmp = New-Object System.Drawing.Bitmap 1920,1080
           $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -50,9 +48,7 @@ jobs:
           Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d); }'
           [W]::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
 
-          # ClearType وخطوط ناعمة
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
-
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 
       - name: Install apps
@@ -84,7 +80,7 @@ jobs:
           Write-Host "=== RDP ACCESS ==="
           Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host "Username: runneradmin"
-          Write-Host "Password: the RDP_PASSWORD secret"
+          Write-Host "Password: the one in RDP_PASSWORD (or the default in the file)"
           Write-Host "=================="
 
       - name: Keep alive
