@@ -3,15 +3,15 @@ on:
   workflow_dispatch:
 
 env:
-  # يستخدم السر RDP_PASSWORD لو موجود، وإلا يستخدم الكلمة الافتراضية
+  RDP_USER: Oreoto52
   RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Rk7#vQm2!xLp9@Wd' }}
 
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 360   # الحد الأقصى في GitHub هو 6 ساعات
+    timeout-minutes: 360
     steps:
-      - name: Enable RDP and set password
+      - name: Enable RDP and set user
         shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
@@ -20,13 +20,26 @@ jobs:
           Start-Service -Name TermService -ErrorAction SilentlyContinue
           Restart-Service -Name TermService -Force
 
+          $user = $env:RDP_USER
+          if ([string]::IsNullOrWhiteSpace($user)) {
+            $user = 'Oreoto52'
+          }
+
           $pass = $env:RDP_PASSWORD
           if ([string]::IsNullOrWhiteSpace($pass)) {
             $pass = 'Rk7#vQm2!xLp9@Wd'
           }
-          net user runneradmin "$pass"
-          if ($LASTEXITCODE -ne 0) { Write-Error "Password was rejected"; exit 1 }
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin" -ErrorAction SilentlyContinue
+
+          $existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
+          if (-not $existing) {
+            net user "$user" "$pass" /add
+          } else {
+            net user "$user" "$pass"
+          }
+          if ($LASTEXITCODE -ne 0) { Write-Error "User creation or password was rejected"; exit 1 }
+
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "$user" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Administrators" -Member "$user" -ErrorAction SilentlyContinue
 
       - name: Install Tailscale
         shell: pwsh
@@ -47,7 +60,11 @@ jobs:
             exit 1
           }
           $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="gh-win-$env:GITHUB_RUN_ID" --unattended
+          if (-not (Test-Path $ts)) {
+            Write-Error "Tailscale executable not found after installation."
+            exit 1
+          }
+          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="Oreoto52-gh-$env:GITHUB_RUN_ID" --unattended
           if ($LASTEXITCODE -ne 0) { Write-Error "tailscale up failed"; exit 1 }
 
           $ip = $null
@@ -58,36 +75,142 @@ jobs:
           if (-not $ip) { Write-Error "No Tailscale IP assigned"; exit 1 }
           "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: Make it look modern
+      - name: Make it look like the requested theme
         shell: pwsh
         run: |
+          # 1. تفعيل الوضع الداكن والشفافية
           $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
           New-Item -Path $p -Force | Out-Null
           Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
           Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
+          Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
 
+          # 2. تحسين الأيقونات وحجمها وتباعدها ووضوحها
+          $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+          New-Item -Path $adv -Force | Out-Null
+          Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
+
+          $metric = 'HKCU:\Control Panel\Desktop\WindowMetrics'
+          New-Item -Path $metric -Force | Out-Null
+          Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
+
+          # 3. تحسين مؤشر الماوس داخل الويندوز ليكون أكبر وأوضح كأيقونة بارزة
+          $cursors = 'HKCU:\Control Panel\Cursors'
+          New-Item -Path $cursors -Force | Out-Null
+          Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
+
+          # 4. إظهار أيقونات سطح المكتب الأساسية
           $icons = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
           New-Item -Path $icons -Force | Out-Null
           Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
           Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
 
-          $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-          Set-ItemProperty -Path $adv -Name HideFileExt -Value 0
-          Set-ItemProperty -Path $adv -Name Hidden -Value 1
-
+          # 5. رسم الخلفية الليلية والساعة والتاريخ
           Add-Type -AssemblyName System.Drawing
-          $bmp = New-Object System.Drawing.Bitmap 1920,1080
+          $w = 1920; $h = 1080
+          $bmp = New-Object System.Drawing.Bitmap $w, $h
           $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $rect = New-Object System.Drawing.Rectangle 0,0,1920,1080
-          $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, [System.Drawing.Color]::FromArgb(15,23,42), [System.Drawing.Color]::FromArgb(79,70,229), 45)
-          $g.FillRectangle($brush, $rect)
+          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+          $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+
+          $skyRect = New-Object System.Drawing.Rectangle 0, 0, $w, 820
+          $skyBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            $skyRect,
+            [System.Drawing.Color]::FromArgb(36, 22, 58),
+            [System.Drawing.Color]::FromArgb(215, 78, 118),
+            90
+          )
+          $g.FillRectangle($skyBrush, $skyRect)
+
+          $horizonRect = New-Object System.Drawing.Rectangle 0, 580, $w, 300
+          $horizonBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            $horizonRect,
+            [System.Drawing.Color]::FromArgb(0, 255, 165, 110),
+            [System.Drawing.Color]::FromArgb(140, 255, 155, 105),
+            90
+          )
+          $g.FillRectangle($horizonBrush, $horizonRect)
+
+          $rng = New-Object System.Random 42
+          for ($s = 0; $s -lt 55; $s++) {
+            $sx = $rng.Next(40, $w - 40)
+            $sy = $rng.Next(30, 540)
+            $sr = $rng.Next(2, 5)
+            $sa = $rng.Next(110, 230)
+            $starBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($sa, 255, 240, 245))
+            $g.FillEllipse($starBrush, $sx, $sy, $sr, $sr)
+          }
+
+          $moonBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(65, 245, 185, 195))
+          $g.FillEllipse($moonBrush, 680, 230, 560, 560)
+
+          $now = Get-Date
+          $timeText = $now.ToString("HH:mm:ss")
+          $dateText = ($now.ToString("MMMM dd yyyy ddd")).ToUpper()
+
+          $timeFont = New-Object System.Drawing.Font("Segoe UI", 118, [System.Drawing.FontStyle]::Bold)
+          $dateFont = New-Object System.Drawing.Font("Segoe UI", 28, [System.Drawing.FontStyle]::Bold)
+
+          $sf = New-Object System.Drawing.StringFormat
+          $sf.Alignment = [System.Drawing.StringAlignment]::Center
+          $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
+
+          $darkShadow = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(135, 25, 12, 35))
+          $lightGlow  = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(75, 255, 220, 235))
+          $mainText   = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(195, 130, 72, 96))
+
+          $g.DrawString($timeText, $timeFont, $darkShadow, 965, 455, $sf)
+          $g.DrawString($timeText, $timeFont, $lightGlow,  957, 447, $sf)
+          $g.DrawString($timeText, $timeFont, $mainText,   960, 450, $sf)
+
+          $g.DrawString($dateText, $dateFont, $darkShadow, 963, 558, $sf)
+          $g.DrawString($dateText, $dateFont, $lightGlow,  958, 553, $sf)
+          $g.DrawString($dateText, $dateFont, $mainText,   960, 555, $sf)
+
+          $mtnPoints = @(
+            [System.Drawing.Point]::new(0, 1080),
+            [System.Drawing.Point]::new(0, 790),
+            [System.Drawing.Point]::new(240, 740),
+            [System.Drawing.Point]::new(430, 815),
+            [System.Drawing.Point]::new(760, 710),
+            [System.Drawing.Point]::new(915, 675),
+            [System.Drawing.Point]::new(1120, 775),
+            [System.Drawing.Point]::new(1480, 735),
+            [System.Drawing.Point]::new(1920, 825),
+            [System.Drawing.Point]::new(1920, 1080)
+          )
+          $mtnBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 24, 28, 54))
+          $g.FillPolygon($mtnBrush, $mtnPoints)
+
+          $wolfBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 24, 28, 54))
+          $wolfBody = @(
+            [System.Drawing.Point]::new(902, 678),
+            [System.Drawing.Point]::new(922, 674),
+            [System.Drawing.Point]::new(928, 658),
+            [System.Drawing.Point]::new(934, 650),
+            [System.Drawing.Point]::new(936, 657),
+            [System.Drawing.Point]::new(929, 666),
+            [System.Drawing.Point]::new(926, 679),
+            [System.Drawing.Point]::new(894, 682)
+          )
+          $g.FillPolygon($wolfBrush, $wolfBody)
+
           $wall = "$env:USERPROFILE\wallpaper.png"
           $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose(); $bmp.Dispose()
+
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wall
+          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
           Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d); }'
           [W]::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
 
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 
       - name: Show connection info
@@ -95,7 +218,7 @@ jobs:
         run: |
           Write-Host "=== RDP ACCESS ==="
           Write-Host "Address:  $env:TAILSCALE_IP"
-          Write-Host "Username: runneradmin"
+          Write-Host "Username: $env:RDP_USER"
           Write-Host "Password: the one in RDP_PASSWORD (or Rk7#vQm2!xLp9@Wd)"
           Write-Host "=================="
 
