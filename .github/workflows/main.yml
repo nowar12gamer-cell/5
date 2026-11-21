@@ -76,49 +76,19 @@ jobs:
         run: |
           $username = $env:RDP_USER
           $userDir = "C:\Users\$username"
+          if (-not (Test-Path $userDir)) {
+            New-Item -ItemType Directory -Path $userDir -Force | Out-Null
+          }
+
           $ntuserDat = "$userDir\NTUSER.DAT"
+          $hiveMounted = $false
 
           if (Test-Path $ntuserDat) {
             Write-Host "Loading Registry Hive for $username..."
             reg load "HKU\CustomUser" "$ntuserDat" | Out-Null
-
-            $p = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
-            Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
-            Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
-            Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
-
-            $adv = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-            if (-not (Test-Path $adv)) { New-Item -Path $adv -Force | Out-Null }
-            Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
-
-            $metric = 'HKU:\CustomUser\Control Panel\Desktop\WindowMetrics'
-            if (-not (Test-Path $metric)) { New-Item -Path $metric -Force | Out-Null }
-            Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
-
-            $cursors = 'HKU:\CustomUser\Control Panel\Cursors'
-            if (-not (Test-Path $cursors)) { New-Item -Path $cursors -Force | Out-Null }
-            Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
-            
-            $acc = 'HKU:\CustomUser\Software\Microsoft\Accessibility'
-            if (-not (Test-Path $acc)) { New-Item -Path $acc -Force | Out-Null }
-            Set-ItemProperty -Path $acc -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
-
-            $icons = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
-            if (-not (Test-Path $icons)) { New-Item -Path $icons -Force | Out-Null }
-            Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
-            Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
-
-            reg unload "HKU\CustomUser" | Out-Null
-            Write-Host "Registry Hive unloaded successfully."
+            if ($LASTEXITCODE -eq 0) { $hiveMounted = $true }
           } else {
-            Write-Warning "User profile directory or NTUSER.DAT not found yet."
+            Write-Warning "NTUSER.DAT not found yet for $username (will be created on first RDP login)."
           }
 
           Add-Type -AssemblyName System.Drawing
@@ -217,12 +187,52 @@ jobs:
           $userWall = "$userDir\wallpaper.png"
           Copy-Item -Path $publicWall -Destination $userWall -Force
 
-          $wpParam = [System.Runtime.InteropServices.Marshal]::StringToBSTR($userWall)
-          [System.Runtime.InteropServices.NativeMethods]::SystemParametersInfo(20, 0, $wpParam, 3) | Out-Null
-          [System.Runtime.InteropServices.Marshal]::FreeBSTR($wpParam)
+          if ($hiveMounted) {
+            $p = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
+            Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
+            Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
 
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $userWall
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
+            $adv = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+            if (-not (Test-Path $adv)) { New-Item -Path $adv -Force | Out-Null }
+            Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
+
+            $metric = 'HKU:\CustomUser\Control Panel\Desktop\WindowMetrics'
+            if (-not (Test-Path $metric)) { New-Item -Path $metric -Force | Out-Null }
+            Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
+
+            $cursors = 'HKU:\CustomUser\Control Panel\Cursors'
+            if (-not (Test-Path $cursors)) { New-Item -Path $cursors -Force | Out-Null }
+            Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
+
+            $acc = 'HKU:\CustomUser\Software\Microsoft\Accessibility'
+            if (-not (Test-Path $acc)) { New-Item -Path $acc -Force | Out-Null }
+            Set-ItemProperty -Path $acc -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
+
+            $icons = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
+            if (-not (Test-Path $icons)) { New-Item -Path $icons -Force | Out-Null }
+            Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
+            Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
+
+            $desk = 'HKU:\CustomUser\Control Panel\Desktop'
+            if (-not (Test-Path $desk)) { New-Item -Path $desk -Force | Out-Null }
+            Set-ItemProperty -Path $desk -Name Wallpaper -Value $userWall -Force
+            Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10' -Force
+            Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0' -Force
+            Set-ItemProperty -Path $desk -Name FontSmoothing -Value 2 -Force
+
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+            reg unload "HKU\CustomUser" | Out-Null
+            Write-Host "Registry Hive unloaded successfully."
+          }
 
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 
