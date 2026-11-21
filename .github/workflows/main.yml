@@ -30,16 +30,17 @@ jobs:
             $pass = 'Rk7#vQm2!xLp9@Wd'
           }
 
+          $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
           $existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
           if (-not $existing) {
-            net user "$user" "$pass" /add
+            New-LocalUser -Name $user -Password $securePass -FullName $user -PasswordNeverExpires -ErrorAction Stop | Out-Null
           } else {
-            net user "$user" "$pass"
+            Set-LocalUser -Name $user -Password $securePass -ErrorAction Stop
           }
-          if ($LASTEXITCODE -ne 0) { Write-Error "User creation or password was rejected"; exit 1 }
 
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "$user" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "$user" -ErrorAction SilentlyContinue
+          Write-Host "User '$user' configured successfully."
 
       - name: Install Tailscale
         shell: pwsh
@@ -99,7 +100,7 @@ jobs:
           Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
           Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
 
-          # 3. تحسين مؤشر الماوس داخل الويندوز ليكون أكبر وأوضح كأيقونة بارزة
+          # 3. تحسين مؤشر الماوس داخل الويندوز
           $cursors = 'HKCU:\Control Panel\Cursors'
           New-Item -Path $cursors -Force | Out-Null
           Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
