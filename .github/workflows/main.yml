@@ -1,17 +1,17 @@
-name: Windows-RDP-Pretty
+name: Windows-RDP
 on:
   workflow_dispatch:
 
 env:
-  RDP_USER: Oreoto52
-  RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Rk7#vQm2!xLp9@Wd' }}
+  RDP_USER: runneradmin
+  RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Oreoto52#2026!' }}
 
 jobs:
   rdp:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
-      - name: Enable RDP and set user
+      - name: Enable RDP and set password
         shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
@@ -21,9 +21,9 @@ jobs:
           Restart-Service -Name TermService -Force
 
           $user = $env:RDP_USER
-          if ([string]::IsNullOrWhiteSpace($user)) { $user = 'Oreoto52' }
+          if ([string]::IsNullOrWhiteSpace($user)) { $user = 'runneradmin' }
           $pass = $env:RDP_PASSWORD
-          if ([string]::IsNullOrWhiteSpace($pass)) { $pass = 'Rk7#vQm2!xLp9@Wd' }
+          if ([string]::IsNullOrWhiteSpace($pass)) { $pass = 'Oreoto52#2026!' }
 
           $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
           $existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
@@ -60,7 +60,7 @@ jobs:
             Write-Error "Tailscale executable not found after installation."
             exit 1
           }
-          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="Oreoto52-gh-$env:GITHUB_RUN_ID" --unattended
+          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="gh-rdp-$env:GITHUB_RUN_ID" --unattended
           if ($LASTEXITCODE -ne 0) { Write-Error "tailscale up failed"; exit 1 }
 
           $ip = $null
@@ -71,178 +71,13 @@ jobs:
           if (-not $ip) { Write-Error "No Tailscale IP assigned"; exit 1 }
           "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: Apply Theme Directly to User Profile
-        shell: pwsh
-        run: |
-          $username = $env:RDP_USER
-          $userDir = "C:\Users\$username"
-          if (-not (Test-Path $userDir)) {
-            New-Item -ItemType Directory -Path $userDir -Force | Out-Null
-          }
-
-          $ntuserDat = "$userDir\NTUSER.DAT"
-          $hiveMounted = $false
-
-          if (Test-Path $ntuserDat) {
-            Write-Host "Loading Registry Hive for $username..."
-            reg load "HKU\CustomUser" "$ntuserDat" | Out-Null
-            if ($LASTEXITCODE -eq 0) { $hiveMounted = $true }
-          } else {
-            Write-Warning "NTUSER.DAT not found yet for $username (will be created on first RDP login)."
-          }
-
-          Add-Type -AssemblyName System.Drawing
-          $w = 1920; $h = 1080
-          $bmp = New-Object System.Drawing.Bitmap $w, $h
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-          $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-
-          $skyRect = New-Object System.Drawing.Rectangle 0, 0, $w, 820
-          $skyBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-            $skyRect,
-            [System.Drawing.Color]::FromArgb(36, 22, 58),
-            [System.Drawing.Color]::FromArgb(215, 78, 118),
-            90
-          )
-          $g.FillRectangle($skyBrush, $skyRect)
-
-          $horizonRect = New-Object System.Drawing.Rectangle 0, 580, $w, 300
-          $horizonBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-            $horizonRect,
-            [System.Drawing.Color]::FromArgb(0, 255, 165, 110),
-            [System.Drawing.Color]::FromArgb(140, 255, 155, 105),
-            90
-          )
-          $g.FillRectangle($horizonBrush, $horizonRect)
-
-          $rng = New-Object System.Random 42
-          for ($s = 0; $s -lt 55; $s++) {
-            $sx = $rng.Next(40, $w - 40)
-            $sy = $rng.Next(30, 540)
-            $sr = $rng.Next(2, 5)
-            $sa = $rng.Next(110, 230)
-            $starBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($sa, 255, 240, 245))
-            $g.FillEllipse($starBrush, $sx, $sy, $sr, $sr)
-          }
-
-          $moonBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(65, 245, 185, 195))
-          $g.FillEllipse($moonBrush, 680, 230, 560, 560)
-
-          $now = Get-Date
-          $timeText = $now.ToString("HH:mm:ss")
-          $dateText = ($now.ToString("MMMM dd yyyy ddd")).ToUpper()
-
-          $timeFont = New-Object System.Drawing.Font("Segoe UI", 118, [System.Drawing.FontStyle]::Bold)
-          $dateFont = New-Object System.Drawing.Font("Segoe UI", 28, [System.Drawing.FontStyle]::Bold)
-
-          $sf = New-Object System.Drawing.StringFormat
-          $sf.Alignment = [System.Drawing.StringAlignment]::Center
-          $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
-
-          $darkShadow = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(135, 25, 12, 35))
-          $lightGlow  = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(75, 255, 220, 235))
-          $mainText   = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(195, 130, 72, 96))
-
-          $g.DrawString($timeText, $timeFont, $darkShadow, 965, 455, $sf)
-          $g.DrawString($timeText, $timeFont, $lightGlow,  957, 447, $sf)
-          $g.DrawString($timeText, $timeFont, $mainText,   960, 450, $sf)
-
-          $g.DrawString($dateText, $dateFont, $darkShadow, 963, 558, $sf)
-          $g.DrawString($dateText, $dateFont, $lightGlow,  958, 553, $sf)
-          $g.DrawString($dateText, $dateFont, $mainText,   960, 555, $sf)
-
-          $mtnPoints = @(
-            [System.Drawing.Point]::new(0, 1080),
-            [System.Drawing.Point]::new(0, 790),
-            [System.Drawing.Point]::new(240, 740),
-            [System.Drawing.Point]::new(430, 815),
-            [System.Drawing.Point]::new(760, 710),
-            [System.Drawing.Point]::new(915, 675),
-            [System.Drawing.Point]::new(1120, 775),
-            [System.Drawing.Point]::new(1480, 735),
-            [System.Drawing.Point]::new(1920, 825),
-            [System.Drawing.Point]::new(1920, 1080)
-          )
-          $mtnBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 24, 28, 54))
-          $g.FillPolygon($mtnBrush, $mtnPoints)
-
-          $wolfBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 24, 28, 54))
-          $wolfBody = @(
-            [System.Drawing.Point]::new(902, 678),
-            [System.Drawing.Point]::new(922, 674),
-            [System.Drawing.Point]::new(928, 658),
-            [System.Drawing.Point]::new(934, 650),
-            [System.Drawing.Point]::new(936, 657),
-            [System.Drawing.Point]::new(929, 666),
-            [System.Drawing.Point]::new(926, 679),
-            [System.Drawing.Point]::new(894, 682)
-          )
-          $g.FillPolygon($wolfBrush, $wolfBody)
-
-          $publicWall = "C:\Users\Public\wallpaper.png"
-          $bmp.Save($publicWall, [System.Drawing.Imaging.ImageFormat]::Png)
-          $g.Dispose(); $bmp.Dispose()
-
-          $userWall = "$userDir\wallpaper.png"
-          Copy-Item -Path $publicWall -Destination $userWall -Force
-
-          if ($hiveMounted) {
-            $p = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
-            Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
-            Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
-            Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
-
-            $adv = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-            if (-not (Test-Path $adv)) { New-Item -Path $adv -Force | Out-Null }
-            Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
-
-            $metric = 'HKU:\CustomUser\Control Panel\Desktop\WindowMetrics'
-            if (-not (Test-Path $metric)) { New-Item -Path $metric -Force | Out-Null }
-            Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
-
-            $cursors = 'HKU:\CustomUser\Control Panel\Cursors'
-            if (-not (Test-Path $cursors)) { New-Item -Path $cursors -Force | Out-Null }
-            Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
-
-            $acc = 'HKU:\CustomUser\Software\Microsoft\Accessibility'
-            if (-not (Test-Path $acc)) { New-Item -Path $acc -Force | Out-Null }
-            Set-ItemProperty -Path $acc -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
-
-            $icons = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
-            if (-not (Test-Path $icons)) { New-Item -Path $icons -Force | Out-Null }
-            Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
-            Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
-
-            $desk = 'HKU:\CustomUser\Control Panel\Desktop'
-            if (-not (Test-Path $desk)) { New-Item -Path $desk -Force | Out-Null }
-            Set-ItemProperty -Path $desk -Name Wallpaper -Value $userWall -Force
-            Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10' -Force
-            Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0' -Force
-            Set-ItemProperty -Path $desk -Name FontSmoothing -Value 2 -Force
-
-            [GC]::Collect()
-            [GC]::WaitForPendingFinalizers()
-            reg unload "HKU\CustomUser" | Out-Null
-            Write-Host "Registry Hive unloaded successfully."
-          }
-
-          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-
       - name: Show connection info
         shell: pwsh
         run: |
           Write-Host "=== RDP ACCESS ==="
           Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: the one in RDP_PASSWORD (or Rk7#vQm2!xLp9@Wd)"
+          Write-Host "Password: the one in RDP_PASSWORD (or Oreoto52#2026!)"
           Write-Host "=================="
 
       - name: Keep alive
