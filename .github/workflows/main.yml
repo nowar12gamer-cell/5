@@ -21,14 +21,9 @@ jobs:
           Restart-Service -Name TermService -Force
 
           $user = $env:RDP_USER
-          if ([string]::IsNullOrWhiteSpace($user)) {
-            $user = 'Oreoto52'
-          }
-
+          if ([string]::IsNullOrWhiteSpace($user)) { $user = 'Oreoto52' }
           $pass = $env:RDP_PASSWORD
-          if ([string]::IsNullOrWhiteSpace($pass)) {
-            $pass = 'Rk7#vQm2!xLp9@Wd'
-          }
+          if ([string]::IsNullOrWhiteSpace($pass)) { $pass = 'Rk7#vQm2!xLp9@Wd' }
 
           $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
           $existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
@@ -76,44 +71,56 @@ jobs:
           if (-not $ip) { Write-Error "No Tailscale IP assigned"; exit 1 }
           "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: Make it look like the requested theme
+      - name: Apply Theme Directly to User Profile
         shell: pwsh
         run: |
-          # 1. تفعيل الوضع الداكن والشفافية
-          $p = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-          New-Item -Path $p -Force | Out-Null
-          Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
-          Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
-          Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
+          $username = $env:RDP_USER
+          $userDir = "C:\Users\$username"
+          $ntuserDat = "$userDir\NTUSER.DAT"
 
-          # 2. تحسين الأيقونات وحجمها وتباعدها ووضوحها
-          $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-          New-Item -Path $adv -Force | Out-Null
-          Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
+          if (Test-Path $ntuserDat) {
+            Write-Host "Loading Registry Hive for $username..."
+            reg load "HKU\CustomUser" "$ntuserDat" | Out-Null
 
-          $metric = 'HKCU:\Control Panel\Desktop\WindowMetrics'
-          New-Item -Path $metric -Force | Out-Null
-          Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
+            $p = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+            if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+            Set-ItemProperty -Path $p -Name AppsUseLightTheme -Value 0
+            Set-ItemProperty -Path $p -Name SystemUsesLightTheme -Value 0
+            Set-ItemProperty -Path $p -Name EnableTransparency -Value 1
 
-          # 3. تحسين مؤشر الماوس داخل الويندوز
-          $cursors = 'HKCU:\Control Panel\Cursors'
-          New-Item -Path $cursors -Force | Out-Null
-          Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
+            $adv = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+            if (-not (Test-Path $adv)) { New-Item -Path $adv -Force | Out-Null }
+            Set-ItemProperty -Path $adv -Name HideFileExt -Value 0 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name Hidden -Value 1 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name ListviewAlphaSelect -Value 1 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $adv -Name ListviewShadow -Value 1 -ErrorAction SilentlyContinue
 
-          # 4. إظهار أيقونات سطح المكتب الأساسية
-          $icons = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
-          New-Item -Path $icons -Force | Out-Null
-          Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
-          Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
+            $metric = 'HKU:\CustomUser\Control Panel\Desktop\WindowMetrics'
+            if (-not (Test-Path $metric)) { New-Item -Path $metric -Force | Out-Null }
+            Set-ItemProperty -Path $metric -Name 'Shell Icon Size' -Value '72' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $metric -Name 'IconSpacing' -Value '-1750' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $metric -Name 'IconVerticalSpacing' -Value '-1550' -ErrorAction SilentlyContinue
 
-          # 5. رسم الخلفية الليلية والساعة والتاريخ
+            $cursors = 'HKU:\CustomUser\Control Panel\Cursors'
+            if (-not (Test-Path $cursors)) { New-Item -Path $cursors -Force | Out-Null }
+            Set-ItemProperty -Path $cursors -Name '(Default)' -Value 'Windows Default (extra large)' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cursors -Name 'CursorBaseSize' -Value 64 -ErrorAction SilentlyContinue
+            
+            $acc = 'HKU:\CustomUser\Software\Microsoft\Accessibility'
+            if (-not (Test-Path $acc)) { New-Item -Path $acc -Force | Out-Null }
+            Set-ItemProperty -Path $acc -Name 'CursorSize' -Value 3 -ErrorAction SilentlyContinue
+
+            $icons = 'HKU:\CustomUser\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
+            if (-not (Test-Path $icons)) { New-Item -Path $icons -Force | Out-Null }
+            Set-ItemProperty -Path $icons -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 0
+            Set-ItemProperty -Path $icons -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 0
+
+            reg unload "HKU\CustomUser" | Out-Null
+            Write-Host "Registry Hive unloaded successfully."
+          } else {
+            Write-Warning "User profile directory or NTUSER.DAT not found yet."
+          }
+
           Add-Type -AssemblyName System.Drawing
           $w = 1920; $h = 1080
           $bmp = New-Object System.Drawing.Bitmap $w, $h
@@ -203,14 +210,19 @@ jobs:
           )
           $g.FillPolygon($wolfBrush, $wolfBody)
 
-          $wall = "$env:USERPROFILE\wallpaper.png"
-          $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Png)
+          $publicWall = "C:\Users\Public\wallpaper.png"
+          $bmp.Save($publicWall, [System.Drawing.Imaging.ImageFormat]::Png)
           $g.Dispose(); $bmp.Dispose()
 
-          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $wall
+          $userWall = "$userDir\wallpaper.png"
+          Copy-Item -Path $publicWall -Destination $userWall -Force
+
+          $wpParam = [System.Runtime.InteropServices.Marshal]::StringToBSTR($userWall)
+          [System.Runtime.InteropServices.NativeMethods]::SystemParametersInfo(20, 0, $wpParam, 3) | Out-Null
+          [System.Runtime.InteropServices.Marshal]::FreeBSTR($wpParam)
+
+          Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $userWall
           Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name FontSmoothing -Value 2
-          Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class W { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d); }'
-          [W]::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
 
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 
