@@ -104,11 +104,14 @@ jobs:
           $arrowCur = "$customDir\normal.cur"
           $handCur  = "$customDir\link.cur"
 
-          if (Test-Path "Demon Slayer Kokushibo Katana Animated Cursor--pointer--SweezyCursors.cur.ico.png") {
-            Copy-Item "Demon Slayer Kokushibo Katana Animated Cursor--pointer--SweezyCursors.cur.ico.png" $arrowPng -Force
+          $kokushiboFile = "Demon Slayer Kokushibo Katana Animated Cursor--pointer--SweezyCursors.cur.ico.png"
+          $waterSwordFile = "Demon Slayer Water Breathing Sword Animated Cursor--pointer--SweezyCursors.cur.ico.png"
+
+          if (Test-Path $kokushiboFile) {
+            Copy-Item $kokushiboFile $arrowPng -Force
           }
-          if (Test-Path "Demon Slayer Water Breathing Sword Animated Cursor--pointer--SweezyCursors.cur.ico.png") {
-            Copy-Item "Demon Slayer Water Breathing Sword Animated Cursor--pointer--SweezyCursors.cur.ico.png" $handPng -Force
+          if (Test-Path $waterSwordFile) {
+            Copy-Item $waterSwordFile $handPng -Force
           }
 
           if (Test-Path $arrowPng) {
@@ -136,7 +139,7 @@ jobs:
             }
           }
 
-          $code = @'
+          $csCode = @'
 using System;
 using System.Runtime.InteropServices;
 
@@ -145,7 +148,7 @@ public class Win32Theme {
   public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
 }
 '@
-          Add-Type -TypeDefinition $code
+          Add-Type -TypeDefinition $csCode
           [Win32Theme]::SystemParametersInfo(0x0057, 0, $null, 0x03) | Out-Null
           Write-Host "Custom cursors applied."
 
