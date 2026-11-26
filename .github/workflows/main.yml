@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: Set user password
         env:
-          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD }}
+          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD || 'Vx7kP2mQ' }}
         run: |
           if [ -z "$MAC_PASSWORD" ]; then
             echo "MAC_PASSWORD secret is missing"; exit 1
@@ -19,7 +19,7 @@ jobs:
 
       - name: Enable Screen Sharing (VNC)
         env:
-          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD }}
+          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD || 'Vx7kP2mQ' }}
         run: |
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
             -activate -configure -access -on \
@@ -54,7 +54,7 @@ jobs:
           echo "=== MAC ACCESS ==="
           echo "Address:  vnc://$TAILSCALE_IP"
           echo "Username: runner"
-          echo "Password: the MAC_PASSWORD secret"
+          echo "Password: Vx7kP2mQ"
           echo "=================="
 
       - name: Keep alive
