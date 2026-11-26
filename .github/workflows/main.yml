@@ -5,7 +5,7 @@ on:
 jobs:
   linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     steps:
       - name: Install desktop and VNC
         run: |
@@ -54,5 +54,4 @@ jobs:
           echo "===================="
 
       - name: Keep alive
-        run: |
-          while true;
+        run: sleep 21000
