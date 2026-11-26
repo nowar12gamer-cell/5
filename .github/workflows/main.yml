@@ -29,52 +29,56 @@ jobs:
           # ---- 1. Wallpaper (purple gradient + rainbow text) ----
           $w = 1920
           $h = 1080
-          $bmp = New-Object System.Drawing.Bitmap -ArgumentList $w, $h
+          $bmp = [System.Drawing.Bitmap]::new($w, $h)
           $g = [System.Drawing.Graphics]::FromImage($bmp)
           $g.SmoothingMode = 'AntiAlias'
           $g.TextRenderingHint = 'AntiAlias'
 
-          $rect = New-Object System.Drawing.Rectangle -ArgumentList 0, 0, $w, $h
+          $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
           $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
           $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
-          $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush -ArgumentList $rect, $c1, $c2, 45.0
+          $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
           $g.FillRectangle($brush, $rect)
 
           $text = 'VEXOR Studio'
-          $font = New-Object System.Drawing.Font -ArgumentList 'Segoe UI', 96, ([System.Drawing.FontStyle]::Bold)
-          $sf = New-Object System.Drawing.StringFormat
+          $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
+          $sf = [System.Drawing.StringFormat]::new()
           $sf.Alignment = 'Center'
           $sf.LineAlignment = 'Center'
-          $box = New-Object System.Drawing.RectangleF -ArgumentList 0, 0, $w, $h
+          $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
           $measured = $g.MeasureString($text, $font, $box.Size, $sf)
 
-          $textRect = New-Object System.Drawing.RectangleF -ArgumentList `
-            (($w - $measured.Width) / 2), `
-            (($h - $measured.Height) / 2), `
-            ([Math]::Max($measured.Width, 10.0)), `
+          $textRect = [System.Drawing.RectangleF]::new(
+            (($w - $measured.Width) / 2),
+            (($h - $measured.Height) / 2),
+            ([Math]::Max($measured.Width, 10.0)),
             ([Math]::Max($measured.Height, 10.0))
+          )
 
-          $rainbowBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush -ArgumentList `
-            $textRect, `
-            [System.Drawing.Color]::Red, `
-            [System.Drawing.Color]::Violet, `
-            0.0
+          $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
+          $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
+          $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            $p1,
+            $p2,
+            [System.Drawing.Color]::Red,
+            [System.Drawing.Color]::Violet
+          )
 
-          $blend = New-Object System.Drawing.Drawing2D.ColorBlend -ArgumentList 7
+          $blend = [System.Drawing.Drawing2D.ColorBlend]::new(7)
           $blend.Colors = [System.Drawing.Color[]]@(
-            [System.Drawing.Color]::FromArgb(255, 255, 50, 50),    # أحمر
-            [System.Drawing.Color]::FromArgb(255, 255, 140, 0),    # برتقالي
-            [System.Drawing.Color]::FromArgb(255, 255, 230, 0),    # أصفر
-            [System.Drawing.Color]::FromArgb(255, 50, 220, 100),   # أخضر
-            [System.Drawing.Color]::FromArgb(255, 40, 180, 255),   # سماوي/أزرق
-            [System.Drawing.Color]::FromArgb(255, 120, 90, 255),   # نيلي
-            [System.Drawing.Color]::FromArgb(255, 230, 80, 255)    # بنفسجي/وردي
+            [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
+            [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
+            [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
+            [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
+            [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
+            [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
+            [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
           )
           $blend.Positions = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
           $rainbowBrush.InterpolationColors = $blend
 
-          $shadowBrush = New-Object System.Drawing.SolidBrush -ArgumentList ([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
-          $shadowBox = New-Object System.Drawing.RectangleF -ArgumentList 0, 4, $w, $h
+          $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
+          $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
           $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
           $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
 
@@ -103,40 +107,40 @@ jobs:
           function New-YellowHaloCursor {
             param([string]$OutPath)
             $size = 64
-            $cbmp = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $cbmp = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
             $cg = [System.Drawing.Graphics]::FromImage($cbmp)
             $cg.SmoothingMode = 'AntiAlias'
             $cg.Clear([System.Drawing.Color]::Transparent)
 
-            $haloFill = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(115, 255, 225, 0))
-            $haloPen  = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(230, 255, 200, 0), 3)
+            $haloFill = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(115, 255, 225, 0))
+            $haloPen  = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(230, 255, 200, 0), 3)
             $cg.FillEllipse($haloFill, 4, 4, 44, 44)
             $cg.DrawEllipse($haloPen, 4, 4, 44, 44)
 
             $pts = [System.Drawing.Point[]]@(
-              (New-Object System.Drawing.Point(26, 26)),
-              (New-Object System.Drawing.Point(26, 56)),
-              (New-Object System.Drawing.Point(34, 48)),
-              (New-Object System.Drawing.Point(40, 60)),
-              (New-Object System.Drawing.Point(45, 57)),
-              (New-Object System.Drawing.Point(39, 45)),
-              (New-Object System.Drawing.Point(49, 45))
+              ([System.Drawing.Point]::new(26, 26)),
+              ([System.Drawing.Point]::new(26, 56)),
+              ([System.Drawing.Point]::new(34, 48)),
+              ([System.Drawing.Point]::new(40, 60)),
+              ([System.Drawing.Point]::new(45, 57)),
+              ([System.Drawing.Point]::new(39, 45)),
+              ([System.Drawing.Point]::new(49, 45))
             )
-            $arrowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Black)
-            $arrowPen   = New-Object System.Drawing.Pen([System.Drawing.Color]::White, 2)
+            $arrowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::Black)
+            $arrowPen   = [System.Drawing.Pen]::new([System.Drawing.Color]::White, 2)
             $cg.FillPolygon($arrowBrush, $pts)
             $cg.DrawPolygon($arrowPen, $pts)
 
             $cg.Dispose()
 
-            $ms = New-Object System.IO.MemoryStream
+            $ms = [System.IO.MemoryStream]::new()
             $cbmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
             $pngBytes = $ms.ToArray()
             $ms.Dispose()
             $cbmp.Dispose()
 
             $fs = [System.IO.File]::Open($OutPath, [System.IO.FileMode]::Create)
-            $bw = New-Object System.IO.BinaryWriter($fs)
+            $bw = [System.IO.BinaryWriter]::new($fs)
             $bw.Write([uint16]0)
             $bw.Write([uint16]2)
             $bw.Write([uint16]1)
