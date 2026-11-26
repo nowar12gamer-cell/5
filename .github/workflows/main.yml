@@ -1,57 +1,124 @@
-name: Linux-Remote
+name: Windows-Remote
 on:
   workflow_dispatch:
 
+env:
+  RDP_USER: runneradmin
+  RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Oreoto52#cat!' }}
+
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  rdp:
+    runs-on: windows-latest
     timeout-minutes: 360
     steps:
-      - name: Install desktop and VNC
+      - name: Enable RDP and set password
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal tigervnc-standalone-server dbus-x11 firefox
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+          $securePass = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
+          Set-LocalUser -Name $env:RDP_USER -Password $securePass
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER -ErrorAction SilentlyContinue
 
-      - name: Start VNC server
+      - name: Customize look (wallpaper, mouse, icons)
+        shell: pwsh
         run: |
-          mkdir -p ~/.vnc
-          echo "Vx7kP2mQ" | vncpasswd -f > ~/.vnc/passwd
-          chmod 600 ~/.vnc/passwd
-          cat > ~/.vnc/xstartup <<'EOF'
-          #!/bin/sh
-          unset SESSION_MANAGER
-          unset DBUS_SESSION_BUS_ADDRESS
-          exec startxfce4
-          EOF
-          chmod +x ~/.vnc/xstartup
-          vncserver :1 -geometry 1600x900 -depth 24 -localhost no
+          # ---- Wallpaper (purple gradient + gold text) ----
+          Add-Type -AssemblyName System.Drawing
+          $w = 1920
+          $h = 1080
+          $bmp = New-Object System.Drawing.Bitmap -ArgumentList $w, $h
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.SmoothingMode = 'AntiAlias'
+          $g.TextRenderingHint = 'AntiAlias'
+          $rect = New-Object System.Drawing.Rectangle -ArgumentList 0, 0, $w, $h
+          $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
+          $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
+          $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush -ArgumentList $rect, $c1, $c2, 45.0
+          $g.FillRectangle($brush, $rect)
+          $font = New-Object System.Drawing.Font -ArgumentList 'Segoe UI', 96, ([System.Drawing.FontStyle]::Bold)
+          $gold = New-Object System.Drawing.SolidBrush -ArgumentList ([System.Drawing.Color]::FromArgb(212, 175, 55))
+          $sf = New-Object System.Drawing.StringFormat
+          $sf.Alignment = 'Center'
+          $sf.LineAlignment = 'Center'
+          $box = New-Object System.Drawing.RectangleF -ArgumentList 0, 0, $w, $h
+          $g.DrawString('VEXOR Studio', $font, $gold, $box, $sf)
+          $wall = Join-Path $env:PUBLIC 'wall.jpg'
+          $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+          $g.Dispose()
+          $bmp.Dispose()
+
+          $desk = 'HKCU:\Control Panel\Desktop'
+          Set-ItemProperty -Path $desk -Name Wallpaper -Value $wall
+          Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10'
+          Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0'
+          $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
+          $native = Add-Type -MemberDefinition $sig -Name Native -Namespace Win32 -PassThru
+          $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
+
+          # ---- Dark mode ----
+          $theme = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+          New-Item -Path $theme -Force | Out-Null
+          Set-ItemProperty -Path $theme -Name AppsUseLightTheme -Value 0 -Type DWord
+          Set-ItemProperty -Path $theme -Name SystemUsesLightTheme -Value 0 -Type DWord
+
+          # ---- Mouse: bigger black cursor ----
+          $acc = 'HKCU:\Software\Microsoft\Accessibility'
+          New-Item -Path $acc -Force | Out-Null
+          Set-ItemProperty -Path $acc -Name CursorSize -Value 4 -Type DWord
+          Set-ItemProperty -Path $acc -Name CursorType -Value 1 -Type DWord
+
+          # ---- Desktop icons: show main icons, bigger size ----
+          $hide = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
+          New-Item -Path $hide -Force | Out-Null
+          $ids = '{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DFE-79F4C8FFEB2C}'
+          foreach ($id in $ids) {
+            Set-ItemProperty -Path $hide -Name $id -Value 0 -Type DWord
+          }
+          $bag = 'HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop'
+          New-Item -Path $bag -Force | Out-Null
+          Set-ItemProperty -Path $bag -Name IconSize -Value 48 -Type DWord
+          Write-Host "Customization applied."
 
       - name: Install Tailscale
+        shell: pwsh
         run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
+          $installer = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $installer
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installer`"", "/quiet", "/norestart" -Wait
+          Start-Service -Name Tailscale -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
 
       - name: Connect Tailscale
+        shell: pwsh
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          if [ -z "$TS_AUTHKEY" ]; then
-            echo "TAILSCALE_AUTH_KEY secret is missing"; exit 1
-          fi
-          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="gh-linux-$GITHUB_RUN_ID"
-          for i in $(seq 1 15); do
-            IP=$(tailscale ip -4 2>/dev/null | head -n1)
-            [ -n "$IP" ] && break
-            sleep 4
-          done
-          [ -z "$IP" ] && { echo "No Tailscale IP"; exit 1; }
-          echo "TAILSCALE_IP=$IP" >> "$GITHUB_ENV"
+          if ([string]::IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
+            Write-Error "TAILSCALE_AUTH_KEY secret is missing."
+            exit 1
+          }
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="gh-win-$env:GITHUB_RUN_ID" --unattended
+          if ($LASTEXITCODE -ne 0) { Write-Error "tailscale up failed"; exit 1 }
+          $ip = $null
+          for ($i = 0; $i -lt 15 -and -not $ip; $i++) {
+            $ip = (& $ts ip -4 2>$null | Select-Object -First 1)
+            if (-not $ip) { Start-Sleep -Seconds 4 }
+          }
+          if (-not $ip) { Write-Error "No Tailscale IP"; exit 1 }
+          "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
       - name: Show connection info
+        shell: pwsh
         run: |
-          echo "=== LINUX ACCESS ==="
-          echo "Address:      $TAILSCALE_IP:5901"
-          echo "VNC Password: Vx7kP2mQ"
-          echo "===================="
+          Write-Host "=== WINDOWS ACCESS ==="
+          Write-Host "Address:  $env:TAILSCALE_IP"
+          Write-Host "Username: runneradmin"
+          Write-Host "Password: Oreoto52#cat!"
+          Write-Host "======================"
 
       - name: Keep alive
-        run: sleep 21000
+        shell: pwsh
+        run: Start-Sleep -Seconds 21000
