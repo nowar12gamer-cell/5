@@ -1,6 +1,9 @@
 name: Windows-RDP
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 env:
   RDP_USER: runneradmin
@@ -12,6 +15,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Enable RDP and set password
         shell: pwsh
         run: |
@@ -53,6 +59,10 @@ jobs:
               [int]$HotspotX = 4,
               [int]$HotspotY = 4
             )
+            if (-not (Test-Path $InputPath)) {
+              Write-Warning "Image not found: $InputPath"
+              return
+            }
             $srcBmp = [System.Drawing.Bitmap]::FromFile($InputPath)
             try {
               $resized = New-Object System.Drawing.Bitmap($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -109,16 +119,16 @@ jobs:
 
           if (Test-Path $kokushiboFile) {
             Copy-Item $kokushiboFile $arrowPng -Force
-          }
-          if (Test-Path $waterSwordFile) {
-            Copy-Item $waterSwordFile $handPng -Force
+            Convert-ImageToCur -InputPath $arrowPng -OutputCurPath $arrowCur -Size 48 -HotspotX 6 -HotspotY 6
+          } else {
+            Write-Warning "Missing file in repo: $kokushiboFile"
           }
 
-          if (Test-Path $arrowPng) {
-            Convert-ImageToCur -InputPath $arrowPng -OutputCurPath $arrowCur -Size 48 -HotspotX 6 -HotspotY 6
-          }
-          if (Test-Path $handPng) {
+          if (Test-Path $waterSwordFile) {
+            Copy-Item $waterSwordFile $handPng -Force
             Convert-ImageToCur -InputPath $handPng -OutputCurPath $handCur -Size 48 -HotspotX 12 -HotspotY 8
+          } else {
+            Write-Warning "Missing file in repo: $waterSwordFile"
           }
 
           $cursorReg = "HKCU:\Control Panel\Cursors"
@@ -167,23 +177,29 @@ public class Win32Theme {
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
-            Write-Error "TAILSCALE_AUTH_KEY secret is missing or empty."
-            exit 1
+            Write-Warning "TAILSCALE_AUTH_KEY secret is missing or empty. Skipping Tailscale login."
+            exit 0
           }
           $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
           if (-not (Test-Path $ts)) {
-            Write-Error "Tailscale executable not found after installation."
-            exit 1
+            Write-Warning "Tailscale executable not found after installation."
+            exit 0
           }
           & $ts up --authkey="$env:TS_AUTHKEY" --hostname="gh-rdp-$env:GITHUB_RUN_ID" --unattended
-          if ($LASTEXITCODE -ne 0) { Write-Error "tailscale up failed"; exit 1 }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "tailscale up failed with exit code $LASTEXITCODE"
+            exit 0
+          }
 
           $ip = $null
           for ($i = 0; $i -lt 15 -and -not $ip; $i++) {
             $ip = (& $ts ip -4 2>$null | Select-Object -First 1).Trim()
             if (-not $ip) { Start-Sleep -Seconds 4 }
           }
-          if (-not $ip) { Write-Error "No Tailscale IP assigned"; exit 1 }
+          if (-not $ip) {
+            Write-Warning "No Tailscale IP assigned"
+            exit 0
+          }
           "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
       - name: Show connection info
