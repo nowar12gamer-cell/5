@@ -1,36 +1,34 @@
-name: macOS-Remote
+name: Linux-Remote
 on:
   workflow_dispatch:
 
 jobs:
-  mac:
-    runs-on: macos-latest
-    timeout-minutes: 60
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
-      - name: Set user password (optional)
-        env:
-          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD || 'Vx7kP2mQ' }}
+      - name: Install desktop and VNC
         run: |
-          sudo dscl . -passwd /Users/runner "" "$MAC_PASSWORD" \
-            || sudo sysadminctl -resetPasswordFor runner -newPassword "$MAC_PASSWORD" -adminUser runner -adminPassword - </dev/null \
-            || echo "Could not change user password, continuing"
-          exit 0
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-terminal tigervnc-standalone-server dbus-x11 firefox
 
-      - name: Enable Screen Sharing (VNC)
-        env:
-          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD || 'Vx7kP2mQ' }}
+      - name: Start VNC server
         run: |
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -access -on \
-            -clientopts -setvnclegacy -vnclegacy yes \
-            -clientopts -setvncpw -vncpw "$MAC_PASSWORD" \
-            -restart -agent -privs -all
+          mkdir -p ~/.vnc
+          echo "Vx7kP2mQ" | vncpasswd -f > ~/.vnc/passwd
+          chmod 600 ~/.vnc/passwd
+          cat > ~/.vnc/xstartup <<'EOF'
+          #!/bin/sh
+          unset SESSION_MANAGER
+          unset DBUS_SESSION_BUS_ADDRESS
+          exec startxfce4
+          EOF
+          chmod +x ~/.vnc/xstartup
+          vncserver :1 -geometry 1600x900 -depth 24 -localhost no
 
-      - name: Install and start Tailscale
+      - name: Install Tailscale
         run: |
-          brew install tailscale
-          sudo brew services start tailscale
-          sleep 5
+          curl -fsSL https://tailscale.com/install.sh | sh
 
       - name: Connect Tailscale
         env:
@@ -39,7 +37,7 @@ jobs:
           if [ -z "$TS_AUTHKEY" ]; then
             echo "TAILSCALE_AUTH_KEY secret is missing"; exit 1
           fi
-          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="gh-mac-$GITHUB_RUN_ID"
+          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="gh-linux-$GITHUB_RUN_ID"
           for i in $(seq 1 15); do
             IP=$(tailscale ip -4 2>/dev/null | head -n1)
             [ -n "$IP" ] && break
@@ -50,15 +48,11 @@ jobs:
 
       - name: Show connection info
         run: |
-          echo "=== MAC ACCESS ==="
-          echo "Address:  $TAILSCALE_IP:5900"
-          echo "Username: runner"
+          echo "=== LINUX ACCESS ==="
+          echo "Address:      $TAILSCALE_IP:5901"
           echo "VNC Password: Vx7kP2mQ"
-          echo "=================="
+          echo "===================="
 
       - name: Keep alive
         run: |
-          while true; do
-            echo "[$(date)] Mac active - IP: $TAILSCALE_IP"
-            sleep 300
-          done
+          while true;
