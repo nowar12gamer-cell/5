@@ -9,7 +9,7 @@ env:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 350
+    timeout-minutes: 340
     steps:
       - name: Enable RDP and set password
         shell: pwsh
@@ -21,89 +21,123 @@ jobs:
           Set-LocalUser -Name $env:RDP_USER -Password $securePass
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER -ErrorAction SilentlyContinue
 
-      - name: Customize look (wallpaper, mouse, icons)
+      - name: Customize look (animated rainbow wallpaper, mouse, icons)
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
 
-          # ---- 1. Wallpaper (purple gradient + rainbow text) ----
           $w = 1920
           $h = 1080
-          $bmp = [System.Drawing.Bitmap]::new($w, $h)
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.SmoothingMode = 'AntiAlias'
-          $g.TextRenderingHint = 'AntiAlias'
-
-          $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
-          $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
-          $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
-          $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
-          $g.FillRectangle($brush, $rect)
-
-          $text = 'VEXOR Studio'
-          $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
-          $sf = [System.Drawing.StringFormat]::new()
-          $sf.Alignment = 'Center'
-          $sf.LineAlignment = 'Center'
-          $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
-          $measured = $g.MeasureString($text, $font, $box.Size, $sf)
-
-          $textRect = [System.Drawing.RectangleF]::new(
-            (($w - $measured.Width) / 2),
-            (($h - $measured.Height) / 2),
-            ([Math]::Max($measured.Width, 10.0)),
-            ([Math]::Max($measured.Height, 10.0))
-          )
-
-          $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
-          $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
-          $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-            $p1,
-            $p2,
-            [System.Drawing.Color]::Red,
-            [System.Drawing.Color]::Violet
-          )
-
-          $blend = [System.Drawing.Drawing2D.ColorBlend]::new(7)
-          $blend.Colors = [System.Drawing.Color[]]@(
-            [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
-            [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
-            [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
-            [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
-            [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
-            [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
-            [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
-          )
-          $blend.Positions = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
-          $rainbowBrush.InterpolationColors = $blend
-
-          $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
-          $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
-          $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
-          $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
-
           $wall = Join-Path $env:PUBLIC 'wall.jpg'
-          $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+          $text = 'VEXOR Studio'
 
-          $rainbowBrush.Dispose()
-          $shadowBrush.Dispose()
-          $brush.Dispose()
-          $font.Dispose()
-          $g.Dispose()
-          $bmp.Dispose()
+          $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
+          $native = Add-Type -MemberDefinition $sig -Name Native -Namespace Win32 -PassThru
+
+          function Save-RainbowWallpaper {
+            param([float]$Shift)
+
+            $bmp = [System.Drawing.Bitmap]::new($w, $h)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode = 'AntiAlias'
+            $g.TextRenderingHint = 'AntiAlias'
+
+            $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
+            $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
+            $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
+            $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
+            $g.FillRectangle($brush, $rect)
+
+            $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
+            $sf = [System.Drawing.StringFormat]::new()
+            $sf.Alignment = 'Center'
+            $sf.LineAlignment = 'Center'
+            $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
+            $measured = $g.MeasureString($text, $font, $box.Size, $sf)
+
+            $textRect = [System.Drawing.RectangleF]::new(
+              (($w - $measured.Width) / 2),
+              (($h - $measured.Height) / 2),
+              ([Math]::Max($measured.Width, 10.0)),
+              ([Math]::Max($measured.Height, 10.0))
+            )
+
+            $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
+            $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
+            $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+              $p1,
+              $p2,
+              [System.Drawing.Color]::Red,
+              [System.Drawing.Color]::Violet
+            )
+
+            $baseColors = [System.Drawing.Color[]]@(
+              [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
+              [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
+              [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
+              [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
+              [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
+              [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
+              [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
+            )
+            $basePos = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
+            $shiftedPos = New-Object 'single[]' 7
+            for ($k = 0; $k -lt 7; $k++) {
+              $val = ($basePos[$k] + $Shift) % 1.0
+              if ($val -lt 0) { $val += 1.0 }
+              $shiftedPos[$k] = [single]$val
+            }
+
+            $pairs = for ($k = 0; $k -lt 7; $k++) {
+              [PSCustomObject]@{ Pos = $shiftedPos[$k]; Col = $baseColors[$k] }
+            }
+            $sorted = $pairs | Sort-Object Pos
+            $blend = [System.Drawing.Drawing2D.ColorBlend]::new(9)
+            $cols = New-Object 'System.Drawing.Color[]' 9
+            $poss = New-Object 'single[]' 9
+
+            $cols[0] = ($sorted[-1]).Col
+            $poss[0] = [single]0.0
+            for ($k = 0; $k -lt 7; $k++) {
+              $cols[$k + 1] = $sorted[$k].Col
+              $poss[$k + 1] = [single][Math]::Min([Math]::Max($sorted[$k].Pos, 0.001), 0.999)
+            }
+            $cols[8] = ($sorted[0]).Col
+            $poss[8] = [single]1.0
+
+            $blend.Colors = $cols
+            $blend.Positions = $poss
+            $rainbowBrush.InterpolationColors = $blend
+
+            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
+            $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
+            $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
+            $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
+
+            $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+
+            $rainbowBrush.Dispose()
+            $shadowBrush.Dispose()
+            $brush.Dispose()
+            $font.Dispose()
+            $g.Dispose()
+            $bmp.Dispose()
+          }
+
+          Save-RainbowWallpaper -Shift 0.0
 
           $desk = 'HKCU:\Control Panel\Desktop'
           Set-ItemProperty -Path $desk -Name Wallpaper -Value $wall
           Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10'
           Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0'
 
-          # ---- 2. Dark mode ----
+          # ---- Dark mode ----
           $theme = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
           New-Item -Path $theme -Force | Out-Null
           Set-ItemProperty -Path $theme -Name AppsUseLightTheme -Value 0 -Type DWord
           Set-ItemProperty -Path $theme -Name SystemUsesLightTheme -Value 0 -Type DWord
 
-          # ---- 3. Custom Yellow-Halo Cursor (.cur) ----
+          # ---- Yellow-Halo Cursor (.cur) ----
           function New-YellowHaloCursor {
             param([string]$OutPath)
             $size = 64
@@ -171,12 +205,10 @@ jobs:
           Set-ItemProperty -Path $acc -Name CursorSize -Value 4 -Type DWord
           Set-ItemProperty -Path $acc -Name CursorType -Value 1 -Type DWord
 
-          $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
-          $native = Add-Type -MemberDefinition $sig -Name Native -Namespace Win32 -PassThru
           $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
           $native::SystemParametersInfo(0x0057, 0, $null, 3) | Out-Null
 
-          # ---- 4. Desktop icons ----
+          # ---- Desktop icons ----
           $hide = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
           New-Item -Path $hide -Force | Out-Null
           $ids = '{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DFE-79F4C8FFEB2C}'
@@ -227,6 +259,99 @@ jobs:
           Write-Host "Password: Oreoto52#cat!"
           Write-Host "======================"
 
-      - name: Keep alive
+      - name: Keep alive & animate rainbow
         shell: pwsh
-        run: Start-Sleep -Seconds 20400
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
+          $native = Add-Type -MemberDefinition $sig -Name NativeAnim -Namespace Win32 -PassThru
+          $wall = Join-Path $env:PUBLIC 'wall.jpg'
+          $w = 1920
+          $h = 1080
+          $text = 'VEXOR Studio'
+          $baseColors = [System.Drawing.Color[]]@(
+            [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
+            [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
+            [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
+            [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
+            [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
+            [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
+            [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
+          )
+          $basePos = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
+
+          $steps = 4020
+          for ($s = 1; $s -le $steps; $s++) {
+            Start-Sleep -Seconds 5
+            $shift = ($s * 0.025) % 1.0
+
+            $bmp = [System.Drawing.Bitmap]::new($w, $h)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.SmoothingMode = 'AntiAlias'
+            $g.TextRenderingHint = 'AntiAlias'
+
+            $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
+            $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
+            $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
+            $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
+            $g.FillRectangle($brush, $rect)
+
+            $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
+            $sf = [System.Drawing.StringFormat]::new()
+            $sf.Alignment = 'Center'
+            $sf.LineAlignment = 'Center'
+            $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
+            $measured = $g.MeasureString($text, $font, $box.Size, $sf)
+
+            $textRect = [System.Drawing.RectangleF]::new(
+              (($w - $measured.Width) / 2),
+              (($h - $measured.Height) / 2),
+              ([Math]::Max($measured.Width, 10.0)),
+              ([Math]::Max($measured.Height, 10.0))
+            )
+
+            $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
+            $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
+            $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+              $p1,
+              $p2,
+              [System.Drawing.Color]::Red,
+              [System.Drawing.Color]::Violet
+            )
+
+            $pairs = for ($k = 0; $k -lt 7; $k++) {
+              $val = ($basePos[$k] + $shift) % 1.0
+              [PSCustomObject]@{ Pos = [single]$val; Col = $baseColors[$k] }
+            }
+            $sorted = $pairs | Sort-Object Pos
+            $blend = [System.Drawing.Drawing2D.ColorBlend]::new(9)
+            $cols = New-Object 'System.Drawing.Color[]' 9
+            $poss = New-Object 'single[]' 9
+            $cols[0] = ($sorted[-1]).Col
+            $poss[0] = [single]0.0
+            for ($k = 0; $k -lt 7; $k++) {
+              $cols[$k + 1] = $sorted[$k].Col
+              $poss[$k + 1] = [single][Math]::Min([Math]::Max($sorted[$k].Pos, 0.001), 0.999)
+            }
+            $cols[8] = ($sorted[0]).Col
+            $poss[8] = [single]1.0
+            $blend.Colors = $cols
+            $blend.Positions = $poss
+            $rainbowBrush.InterpolationColors = $blend
+
+            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
+            $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
+            $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
+            $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
+
+            $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+
+            $rainbowBrush.Dispose()
+            $shadowBrush.Dispose()
+            $brush.Dispose()
+            $font.Dispose()
+            $g.Dispose()
+            $bmp.Dispose()
+
+            $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
+          }
