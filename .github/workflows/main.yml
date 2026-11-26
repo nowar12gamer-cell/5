@@ -5,6 +5,7 @@ on:
 env:
   RDP_USER: runneradmin
   RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Oreoto52#2026!' }}
+  WALLPAPER_MP4_URL: "https://YOUR_DIRECT_LINK_TO/yuta-okkotsu-and-rika-2-live-wallpaper.mp4"
 
 jobs:
   rdp:
@@ -36,6 +37,117 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "$user" -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Administrators" -Member "$user" -ErrorAction SilentlyContinue
           Write-Host "User '$user' configured successfully."
+
+      - name: Apply custom cursors and wallpaper
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $customDir = "C:\CustomTheme"
+          New-Item -ItemType Directory -Path $customDir -Force | Out-Null
+
+          function Convert-ImageToCur {
+            param(
+              [string]$InputPath,
+              [string]$OutputCurPath,
+              [int]$Size = 48,
+              [int]$HotspotX = 4,
+              [int]$HotspotY = 4
+            )
+            $srcBmp = [System.Drawing.Bitmap]::FromFile($InputPath)
+            try {
+              $resized = New-Object System.Drawing.Bitmap($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+              $g = [System.Drawing.Graphics]::FromImage($resized)
+              $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+              $g.Clear([System.Drawing.Color]::Transparent)
+              $g.DrawImage($srcBmp, 0, 0, $Size, $Size)
+              $g.Dispose()
+
+              for ($y = 0; $y -lt $resized.Height; $y++) {
+                for ($x = 0; $x -lt $resized.Width; $x++) {
+                  $px = $resized.GetPixel($x, $y)
+                  if ($px.R -lt 12 -and $px.G -lt 12 -and $px.B -lt 12) {
+                    $resized.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(0, $px.R, $px.G, $px.B))
+                  }
+                }
+              }
+
+              $msPng = New-Object System.IO.MemoryStream
+              $resized.Save($msPng, [System.Drawing.Imaging.ImageFormat]::Png)
+              $pngBytes = $msPng.ToArray()
+              $msPng.Dispose()
+              $resized.Dispose()
+
+              $fs = [System.IO.File]::Open($OutputCurPath, [System.IO.FileMode]::Create)
+              $bw = New-Object System.IO.BinaryWriter($fs)
+              $bw.Write([UInt16]0)
+              $bw.Write([UInt16]2)
+              $bw.Write([UInt16]1)
+              $bw.Write([Byte]($Size % 256))
+              $bw.Write([Byte]($Size % 256))
+              $bw.Write([Byte]0)
+              $bw.Write([Byte]0)
+              $bw.Write([UInt16]$HotspotX)
+              $bw.Write([UInt16]$HotspotY)
+              $bw.Write([UInt32]$pngBytes.Length)
+              $bw.Write([UInt32]22)
+              $bw.Write($pngBytes)
+              $bw.Flush()
+              $bw.Close()
+              $fs.Close()
+            } finally {
+              $srcBmp.Dispose()
+            }
+          }
+
+          $arrowPng = "$customDir\normal.png"
+          $handPng  = "$customDir\link.png"
+          $arrowCur = "$customDir\normal.cur"
+          $handCur  = "$customDir\link.cur"
+
+          if (Test-Path "Demon Slayer Kokushibo Katana Animated Cursor--pointer--SweezyCursors.cur.ico.png") {
+            Copy-Item "Demon Slayer Kokushibo Katana Animated Cursor--pointer--SweezyCursors.cur.ico.png" $arrowPng -Force
+          }
+          if (Test-Path "Demon Slayer Water Breathing Sword Animated Cursor--pointer--SweezyCursors.cur.ico.png") {
+            Copy-Item "Demon Slayer Water Breathing Sword Animated Cursor--pointer--SweezyCursors.cur.ico.png" $handPng -Force
+          }
+
+          if (Test-Path $arrowPng) {
+            Convert-ImageToCur -InputPath $arrowPng -OutputCurPath $arrowCur -Size 48 -HotspotX 6 -HotspotY 6
+          }
+          if (Test-Path $handPng) {
+            Convert-ImageToCur -InputPath $handPng -OutputCurPath $handCur -Size 48 -HotspotX 12 -HotspotY 8
+          }
+
+          $cursorReg = "HKCU:\Control Panel\Cursors"
+          if (Test-Path $arrowCur) {
+            Set-ItemProperty -Path $cursorReg -Name "Arrow" -Value $arrowCur -Force
+          }
+          if (Test-Path $handCur) {
+            Set-ItemProperty -Path $cursorReg -Name "Hand" -Value $handCur -Force
+          }
+
+          $mp4Path = "$customDir\yuta-okkotsu-and-rika-2-live-wallpaper.mp4"
+          if (-not [string]::IsNullOrWhiteSpace($env:WALLPAPER_MP4_URL) -and ($env:WALLPAPER_MP4_URL -notlike "*YOUR_DIRECT_LINK_TO*")) {
+            try {
+              Invoke-WebRequest -Uri $env:WALLPAPER_MP4_URL -OutFile $mp4Path -UseBasicParsing
+              Write-Host "Wallpaper video downloaded to $mp4Path"
+            } catch {
+              Write-Warning "Could not download wallpaper video: $_"
+            }
+          }
+
+          $code = @'
+using System;
+using System.Runtime.InteropServices;
+
+public class Win32Theme {
+  [DllImport("user32.dll", SetLastError = true)]
+  public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
+}
+'@
+          Add-Type -TypeDefinition $code
+          [Win32Theme]::SystemParametersInfo(0x0057, 0, $null, 0x03) | Out-Null
+          Write-Host "Custom cursors applied."
 
       - name: Install Tailscale
         shell: pwsh
