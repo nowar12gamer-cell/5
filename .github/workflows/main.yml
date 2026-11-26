@@ -1,89 +1,65 @@
-name: Windows-RDP
+name: macOS-Remote
 on:
   workflow_dispatch:
 
-env:
-  RDP_USER: runneradmin
-  RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Oreoto52#2026!' }}
-
 jobs:
-  rdp:
-    runs-on: windows-latest
+  mac:
+    runs-on: macos-latest
     timeout-minutes: 360
     steps:
-      - name: Enable RDP and set password
-        shell: pwsh
+      - name: Set user password
+        env:
+          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD }}
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
-          Start-Service -Name TermService -ErrorAction SilentlyContinue
-          Restart-Service -Name TermService -Force
+          if [ -z "$MAC_PASSWORD" ]; then
+            echo "MAC_PASSWORD secret is missing"; exit 1
+          fi
+          sudo dscl . -passwd /Users/runner "$MAC_PASSWORD"
+          echo "Password set for user: runner"
 
-          $user = $env:RDP_USER
-          if ([string]::IsNullOrWhiteSpace($user)) { $user = 'runneradmin' }
-          $pass = $env:RDP_PASSWORD
-          if ([string]::IsNullOrWhiteSpace($pass)) { $pass = 'Oreoto52#2026!' }
-
-          $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
-          $existing = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
-          if (-not $existing) {
-            New-LocalUser -Name $user -Password $securePass -FullName $user -PasswordNeverExpires -ErrorAction Stop | Out-Null
-          } else {
-            Set-LocalUser -Name $user -Password $securePass -ErrorAction Stop
-          }
-
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "$user" -ErrorAction SilentlyContinue
-          Add-LocalGroupMember -Group "Administrators" -Member "$user" -ErrorAction SilentlyContinue
-          Write-Host "User '$user' configured successfully."
-
-      - name: Install Tailscale
-        shell: pwsh
+      - name: Enable Screen Sharing (VNC)
+        env:
+          MAC_PASSWORD: ${{ secrets.MAC_PASSWORD }}
         run: |
-          $installer = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $installer
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installer`"", "/quiet", "/norestart" -Wait
-          Start-Service -Name Tailscale -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 5
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -clientopts -setvncpw -vncpw "$MAC_PASSWORD" \
+            -restart -agent -privs -all
+
+      - name: Install and start Tailscale
+        run: |
+          brew install tailscale
+          sudo brew services start tailscale
+          sleep 5
 
       - name: Connect Tailscale
-        shell: pwsh
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
-            Write-Error "TAILSCALE_AUTH_KEY secret is missing or empty."
-            exit 1
-          }
-          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          if (-not (Test-Path $ts)) {
-            Write-Error "Tailscale executable not found after installation."
-            exit 1
-          }
-          & $ts up --authkey="$env:TS_AUTHKEY" --hostname="gh-rdp-$env:GITHUB_RUN_ID" --unattended
-          if ($LASTEXITCODE -ne 0) { Write-Error "tailscale up failed"; exit 1 }
-
-          $ip = $null
-          for ($i = 0; $i -lt 15 -and -not $ip; $i++) {
-            $ip = (& $ts ip -4 2>$null | Select-Object -First 1).Trim()
-            if (-not $ip) { Start-Sleep -Seconds 4 }
-          }
-          if (-not $ip) { Write-Error "No Tailscale IP assigned"; exit 1 }
-          "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+          if [ -z "$TS_AUTHKEY" ]; then
+            echo "TAILSCALE_AUTH_KEY secret is missing"; exit 1
+          fi
+          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="gh-mac-$GITHUB_RUN_ID"
+          for i in $(seq 1 15); do
+            IP=$(tailscale ip -4 2>/dev/null | head -n1)
+            [ -n "$IP" ] && break
+            sleep 4
+          done
+          [ -z "$IP" ] && { echo "No Tailscale IP"; exit 1; }
+          echo "TAILSCALE_IP=$IP" >> "$GITHUB_ENV"
 
       - name: Show connection info
-        shell: pwsh
         run: |
-          Write-Host "=== RDP ACCESS ==="
-          Write-Host "Address:  $env:TAILSCALE_IP"
-          Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: the one in RDP_PASSWORD (or Oreoto52#2026!)"
-          Write-Host "=================="
+          echo "=== MAC ACCESS ==="
+          echo "Address:  vnc://$TAILSCALE_IP"
+          echo "Username: runner"
+          echo "Password: the MAC_PASSWORD secret"
+          echo "=================="
 
       - name: Keep alive
-        shell: pwsh
         run: |
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP active - IP: $env:TAILSCALE_IP"
-              Start-Sleep -Seconds 300
-          }
+          while true; do
+            echo "[$(date)] Mac active - IP: $TAILSCALE_IP"
+            sleep 300
+          done
