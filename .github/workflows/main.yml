@@ -9,7 +9,7 @@ env:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 2000
+    timeout-minutes: 6000000000000000000
     steps:
       - name: Enable RDP and create user Abdullah
         shell: pwsh
@@ -28,7 +28,7 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER -ErrorAction SilentlyContinue
 
-      - name: Customize look (animated rainbow wallpaper, cursors, icons)
+      - name: Customize look (premium UI, animated rainbow wallpaper, cursors, icons)
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -37,129 +37,138 @@ jobs:
           $h = 1080
           $wall = Join-Path $env:PUBLIC 'wall.jpg'
           $text = 'Abdullah, Roblox programmer'
+          $subText = 'LUAU  •  ROBLOX STUDIO  •  AI WORKSPACE'
 
           $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
           $native = Add-Type -MemberDefinition $sig -Name Native -Namespace Win32 -PassThru
 
-          function Save-RainbowWallpaper {
+          function Add-RoundedRectPath {
+            param([System.Drawing.RectangleF]$Rect, [float]$Radius)
+            $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $d = $Radius * 2
+            $path.AddArc($Rect.X, $Rect.Y, $d, $d, 180, 90)
+            $path.AddArc($Rect.Right - $d, $Rect.Y, $d, $d, 270, 90)
+            $path.AddArc($Rect.Right - $d, $Rect.Bottom - $d, $d, $d, 0, 90)
+            $path.AddArc($Rect.X, $Rect.Bottom - $d, $d, $d, 90, 90)
+            $path.CloseFigure()
+            return $path
+          }
+
+          function Save-PremiumWallpaper {
             param([float]$Shift)
 
             $bmp = [System.Drawing.Bitmap]::new($w, $h)
             $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.SmoothingMode = 'AntiAlias'
-            $g.TextRenderingHint = 'AntiAlias'
+            $g.SmoothingMode = 'HighQuality'
+            $g.TextRenderingHint = 'AntiAliasGridFit'
 
             $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
-            $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
-            $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
-            $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
-            $g.FillRectangle($brush, $rect)
+            $c1 = [System.Drawing.Color]::FromArgb(10, 6, 24)
+            $c2 = [System.Drawing.Color]::FromArgb(36, 14, 72)
+            $bgBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 35.0)
+            $g.FillRectangle($bgBrush, $rect)
 
-            $font = [System.Drawing.Font]::new('Segoe UI', 84, ([System.Drawing.FontStyle]::Bold))
-            $sf = [System.Drawing.StringFormat]::new()
-            $sf.Alignment = 'Center'
-            $sf.LineAlignment = 'Center'
-            $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
-            $measured = $g.MeasureString($text, $font, $box.Size, $sf)
+            $glowPath1 = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $glowPath1.AddEllipse(-200, -150, 900, 900)
+            $pgb1 = [System.Drawing.Drawing2D.PathGradientBrush]::new($glowPath1)
+            $pgb1.CenterColor = [System.Drawing.Color]::FromArgb(85, 130, 50, 255)
+            $pgb1.SurroundColors = [System.Drawing.Color[]]@([System.Drawing.Color]::Transparent)
+            $g.FillPath($pgb1, $glowPath1)
 
-            $textRect = [System.Drawing.RectangleF]::new(
-              (($w - $measured.Width) / 2),
-              (($h - $measured.Height) / 2),
-              ([Math]::Max($measured.Width, 10.0)),
-              ([Math]::Max($measured.Height, 10.0))
+            $glowPath2 = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $glowPath2.AddEllipse($w - 750, $h - 650, 950, 950)
+            $pgb2 = [System.Drawing.Drawing2D.PathGradientBrush]::new($glowPath2)
+            $pgb2.CenterColor = [System.Drawing.Color]::FromArgb(75, 0, 190, 255)
+            $pgb2.SurroundColors = [System.Drawing.Color[]]@([System.Drawing.Color]::Transparent)
+            $g.FillPath($pgb2, $glowPath2)
+
+            $gridPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(16, 255, 255, 255), 1)
+            for ($gx = 0; $gx -lt $w; $gx += 60) { $g.DrawLine($gridPen, $gx, 0, $gx, $h) }
+            for ($gy = 0; $gy -lt $h; $gy += 60) { $g.DrawLine($gridPen, 0, $gy, $w, $gy) }
+
+            $cardRect = [System.Drawing.RectangleF]::new(240, 355, 1440, 340)
+            $cardPath = Add-RoundedRectPath -Rect $cardRect -Radius 34
+            $cardFill = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(135, 16, 12, 34))
+            $g.FillPath($cardFill, $cardPath)
+
+            $borderBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+              [System.Drawing.PointF]::new($cardRect.Left, $cardRect.Top),
+              [System.Drawing.PointF]::new($cardRect.Right, $cardRect.Bottom),
+              [System.Drawing.Color]::Cyan,
+              [System.Drawing.Color]::Magenta
             )
-
-            $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
-            $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
-            $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-              $p1,
-              $p2,
-              [System.Drawing.Color]::Red,
-              [System.Drawing.Color]::Violet
-            )
-
             $baseColors = [System.Drawing.Color[]]@(
-              [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
-              [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
-              [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
-              [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
-              [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
-              [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
-              [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
+              [System.Drawing.Color]::FromArgb(255, 255, 55, 85),
+              [System.Drawing.Color]::FromArgb(255, 255, 155, 20),
+              [System.Drawing.Color]::FromArgb(255, 255, 235, 40),
+              [System.Drawing.Color]::FromArgb(255, 50, 235, 130),
+              [System.Drawing.Color]::FromArgb(255, 40, 195, 255),
+              [System.Drawing.Color]::FromArgb(255, 135, 95, 255),
+              [System.Drawing.Color]::FromArgb(255, 240, 80, 255)
             )
             $basePos = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
-            $shiftedPos = New-Object 'single[]' 7
-            for ($k = 0; $k -lt 7; $k++) {
+            $pairs = for ($k = 0; $k -lt 7; $k++) {
               $val = ($basePos[$k] + $Shift) % 1.0
               if ($val -lt 0) { $val += 1.0 }
-              $shiftedPos[$k] = [single]$val
-            }
-
-            $pairs = for ($k = 0; $k -lt 7; $k++) {
-              [PSCustomObject]@{ Pos = $shiftedPos[$k]; Col = $baseColors[$k] }
+              [PSCustomObject]@{ Pos = [single]$val; Col = $baseColors[$k] }
             }
             $sorted = $pairs | Sort-Object Pos
             $blend = [System.Drawing.Drawing2D.ColorBlend]::new(9)
             $cols = New-Object 'System.Drawing.Color[]' 9
             $poss = New-Object 'single[]' 9
-
-            $cols[0] = ($sorted[-1]).Col
-            $poss[0] = [single]0.0
+            $cols[0] = ($sorted[-1]).Col; $poss[0] = [single]0.0
             for ($k = 0; $k -lt 7; $k++) {
               $cols[$k + 1] = $sorted[$k].Col
               $poss[$k + 1] = [single][Math]::Min([Math]::Max($sorted[$k].Pos, 0.001), 0.999)
             }
-            $cols[8] = ($sorted[0]).Col
-            $poss[8] = [single]1.0
-
+            $cols[8] = ($sorted[0]).Col; $poss[8] = [single]1.0
             $blend.Colors = $cols
             $blend.Positions = $poss
-            $rainbowBrush.InterpolationColors = $blend
+            $borderBrush.InterpolationColors = $blend
 
-            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
-            $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
+            $borderPen = [System.Drawing.Pen]::new($borderBrush, 3.5)
+            $g.DrawPath($borderPen, $cardPath)
+
+            $font = [System.Drawing.Font]::new('Segoe UI', 76, ([System.Drawing.FontStyle]::Bold))
+            $sf = [System.Drawing.StringFormat]::new()
+            $sf.Alignment = 'Center'
+            $sf.LineAlignment = 'Center'
+            $titleBox = [System.Drawing.RectangleF]::new(240, 385, 1440, 180)
+            $shadowBox = [System.Drawing.RectangleF]::new(240, 391, 1440, 180)
+            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(180, 5, 2, 15))
+
             $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
-            $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
+            $g.DrawString($text, $font, $borderBrush, $titleBox, $sf)
+
+            $subFont = [System.Drawing.Font]::new('Segoe UI Semibold', 22, ([System.Drawing.FontStyle]::Bold))
+            $subBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(215, 210, 220, 255))
+            $subBox = [System.Drawing.RectangleF]::new(240, 565, 1440, 75)
+            $g.DrawString($subText, $subFont, $subBrush, $subBox, $sf)
 
             $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
 
-            $rainbowBrush.Dispose()
-            $shadowBrush.Dispose()
-            $brush.Dispose()
-            $font.Dispose()
-            $g.Dispose()
-            $bmp.Dispose()
+            $subBrush.Dispose(); $subFont.Dispose(); $shadowBrush.Dispose(); $font.Dispose()
+            $borderPen.Dispose(); $borderBrush.Dispose(); $cardFill.Dispose(); $cardPath.Dispose()
+            $gridPen.Dispose(); $pgb2.Dispose(); $glowPath2.Dispose(); $pgb1.Dispose(); $glowPath1.Dispose()
+            $bgBrush.Dispose(); $g.Dispose(); $bmp.Dispose()
           }
 
-          Save-RainbowWallpaper -Shift 0.0
+          Save-PremiumWallpaper -Shift 0.0
 
           function Convert-PngToCur {
-            param(
-              [byte[]]$PngBytes,
-              [string]$OutPath,
-              [int]$Size,
-              [uint16]$HotspotX,
-              [uint16]$HotspotY
-            )
+            param([byte[]]$PngBytes, [string]$OutPath, [int]$Size, [uint16]$HotspotX, [uint16]$HotspotY)
             $fs = [System.IO.File]::Open($OutPath, [System.IO.FileMode]::Create)
             $bw = [System.IO.BinaryWriter]::new($fs)
-            $bw.Write([uint16]0)
-            $bw.Write([uint16]2)
-            $bw.Write([uint16]1)
-            $bw.Write([byte]($Size -band 0xFF))
-            $bw.Write([byte]($Size -band 0xFF))
-            $bw.Write([byte]0)
-            $bw.Write([byte]0)
-            $bw.Write($HotspotX)
-            $bw.Write($HotspotY)
-            $bw.Write([uint32]$PngBytes.Length)
-            $bw.Write([uint32]22)
+            $bw.Write([uint16]0); $bw.Write([uint16]2); $bw.Write([uint16]1)
+            $bw.Write([byte]($Size -band 0xFF)); $bw.Write([byte]($Size -band 0xFF))
+            $bw.Write([byte]0); $bw.Write([byte]0)
+            $bw.Write($HotspotX); $bw.Write($HotspotY)
+            $bw.Write([uint32]$PngBytes.Length); $bw.Write([uint32]22)
             $bw.Write($PngBytes)
-            $bw.Close()
-            $fs.Close()
+            $bw.Close(); $fs.Close()
           }
 
-          # ---- 1. Kokushibo Katana Primary Cursor (.cur) ----
+          # ---- Kokushibo Katana Primary Cursor (.cur) ----
           $katanaB64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVFhhe7XBCQAAAMQwsP+N3q2EAgAAwK8B8XQB+X0+XQAAAABJRU5ErkJggg=='
           $katanaPng = Join-Path $env:TEMP 'kokushibo_raw.png'
           [System.IO.File]::WriteAllBytes($katanaPng, [System.Convert]::FromBase64String($katanaB64))
@@ -172,8 +181,7 @@ jobs:
           $kg.InterpolationMode = 'HighQualityBicubic'
           $kg.Clear([System.Drawing.Color]::Transparent)
           $kg.DrawImage($srcImg, 0, 0, $curSize, $curSize)
-          $kg.Dispose()
-          $srcImg.Dispose()
+          $kg.Dispose(); $srcImg.Dispose()
 
           for ($y = 0; $y -lt $curSize; $y++) {
             for ($x = 0; $x -lt $curSize; $x++) {
@@ -187,13 +195,12 @@ jobs:
           $kms = [System.IO.MemoryStream]::new()
           $kbmp.Save($kms, [System.Drawing.Imaging.ImageFormat]::Png)
           $katanaCurBytes = $kms.ToArray()
-          $kms.Dispose()
-          $kbmp.Dispose()
+          $kms.Dispose(); $kbmp.Dispose()
 
           $katanaCurPath = Join-Path $env:PUBLIC 'kokushibo_arrow.cur'
           Convert-PngToCur -PngBytes $katanaCurBytes -OutPath $katanaCurPath -Size $curSize -HotspotX 6 -HotspotY 6
 
-          # ---- 2. Yellow-Halo Cursor (.cur) for Hand / AppStarting ----
+          # ---- Yellow-Halo Cursor (.cur) ----
           $size = 64
           $cbmp = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
           $cg = [System.Drawing.Graphics]::FromImage($cbmp)
@@ -223,8 +230,7 @@ jobs:
           $ms = [System.IO.MemoryStream]::new()
           $cbmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
           $pngBytes = $ms.ToArray()
-          $ms.Dispose()
-          $cbmp.Dispose()
+          $ms.Dispose(); $cbmp.Dispose()
 
           $curPath = Join-Path $env:PUBLIC 'yellow_halo.cur'
           Convert-PngToCur -PngBytes $pngBytes -OutPath $curPath -Size $size -HotspotX 26 -HotspotY 26
@@ -243,6 +249,17 @@ jobs:
             New-Item -Path $theme -Force | Out-Null
             Set-ItemProperty -Path $theme -Name AppsUseLightTheme -Value 0 -Type DWord
             Set-ItemProperty -Path $theme -Name SystemUsesLightTheme -Value 0 -Type DWord
+            Set-ItemProperty -Path $theme -Name EnableTransparency -Value 1 -Type DWord
+            Set-ItemProperty -Path $theme -Name ColorPrevalence -Value 1 -Type DWord
+
+            $dwm = "$root\Software\Microsoft\Windows\DWM"
+            New-Item -Path $dwm -Force | Out-Null
+            Set-ItemProperty -Path $dwm -Name AccentColor -Value 0xffb4286e -Type DWord
+            Set-ItemProperty -Path $dwm -Name ColorPrevalence -Value 1 -Type DWord
+
+            $search = "$root\Software\Microsoft\Windows\CurrentVersion\Search"
+            New-Item -Path $search -Force | Out-Null
+            Set-ItemProperty -Path $search -Name SearchboxTaskbarMode -Value 1 -Type DWord
 
             $cursorsKey = "$root\Control Panel\Cursors"
             New-Item -Path $cursorsKey -Force | Out-Null
@@ -268,23 +285,43 @@ jobs:
           $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
           $native::SystemParametersInfo(0x0057, 0, $null, 3) | Out-Null
 
-          Write-Host "Customization with Kokushibo Katana arrow applied."
+          Write-Host "Premium UI customization applied."
 
-      - name: Install Roblox Studio
+      - name: Install Roblox Studio, ChatGPT & Claude AI
         shell: pwsh
         run: |
-          $installed = $false
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget install --id Roblox.RobloxStudio --exact --silent --accept-package-agreements --accept-source-agreements
-            if ($LASTEXITCODE -eq 0) { $installed = $true }
-          }
-          if (-not $installed) {
+          winget source update --disable-interactivity | Out-Null
+
+          $studioInstalled = $false
+          winget install --id Roblox.RobloxStudio --exact --silent --accept-package-agreements --accept-source-agreements
+          if ($LASTEXITCODE -eq 0) { $studioInstalled = $true }
+          if (-not $studioInstalled) {
             $studioInstaller = "$env:TEMP\RobloxStudioInstaller.exe"
             Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" -OutFile $studioInstaller -UseBasicParsing
             Start-Process -FilePath $studioInstaller -ArgumentList "/silent" -Wait
           }
-          Start-Sleep -Seconds 5
-          Write-Host "Roblox Studio installation step finished."
+
+          winget install --id OpenAI.ChatGPT --exact --silent --accept-package-agreements --accept-source-agreements
+          winget install --id Anthropic.Claude --exact --silent --accept-package-agreements --accept-source-agreements
+
+          $wsh = New-Object -ComObject WScript.Shell
+          $pubDesk = [Environment]::GetFolderPath('CommonDesktopDirectory')
+
+          $chatgptExe = Get-ChildItem -Path "$env:ProgramFiles\WindowsApps", "$env:LOCALAPPDATA\Programs" -Filter "ChatGPT.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($chatgptExe) {
+            $sc1 = $wsh.CreateShortcut((Join-Path $pubDesk "ChatGPT.lnk"))
+            $sc1.TargetPath = $chatgptExe.FullName
+            $sc1.Save()
+          }
+
+          $claudeExe = Get-ChildItem -Path "$env:LOCALAPPDATA\AnthropicClaude", "$env:LOCALAPPDATA\Programs", "$env:ProgramFiles" -Filter "claude.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($claudeExe) {
+            $sc2 = $wsh.CreateShortcut((Join-Path $pubDesk "Claude AI.lnk"))
+            $sc2.TargetPath = $claudeExe.FullName
+            $sc2.Save()
+          }
+
+          Write-Host "Roblox Studio, ChatGPT, and Claude AI installed."
 
       - name: Install Tailscale
         shell: pwsh
@@ -334,56 +371,75 @@ jobs:
           $w = 1920
           $h = 1080
           $text = 'Abdullah, Roblox programmer'
+          $subText = 'LUAU  •  ROBLOX STUDIO  •  AI WORKSPACE'
           $baseColors = [System.Drawing.Color[]]@(
-            [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
-            [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
-            [System.Drawing.Color]::FromArgb(255, 255, 230, 0),
-            [System.Drawing.Color]::FromArgb(255, 50, 220, 100),
-            [System.Drawing.Color]::FromArgb(255, 40, 180, 255),
-            [System.Drawing.Color]::FromArgb(255, 120, 90, 255),
-            [System.Drawing.Color]::FromArgb(255, 230, 80, 255)
+            [System.Drawing.Color]::FromArgb(255, 255, 55, 85),
+            [System.Drawing.Color]::FromArgb(255, 255, 155, 20),
+            [System.Drawing.Color]::FromArgb(255, 255, 235, 40),
+            [System.Drawing.Color]::FromArgb(255, 50, 235, 130),
+            [System.Drawing.Color]::FromArgb(255, 40, 195, 255),
+            [System.Drawing.Color]::FromArgb(255, 135, 95, 255),
+            [System.Drawing.Color]::FromArgb(255, 240, 80, 255)
           )
           $basePos = [single[]]@(0.0, 0.17, 0.34, 0.51, 0.68, 0.85, 1.0)
 
-          $steps = 4020
+          function Add-RoundedRectPath {
+            param([System.Drawing.RectangleF]$Rect, [float]$Radius)
+            $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $d = $Radius * 2
+            $path.AddArc($Rect.X, $Rect.Y, $d, $d, 180, 90)
+            $path.AddArc($Rect.Right - $d, $Rect.Y, $d, $d, 270, 90)
+            $path.AddArc($Rect.Right - $d, $Rect.Bottom - $d, $d, $d, 0, 90)
+            $path.AddArc($Rect.X, $Rect.Bottom - $d, $d, $d, 90, 90)
+            $path.CloseFigure()
+            return $path
+          }
+
+          $steps = 4080
           for ($s = 1; $s -le $steps; $s++) {
             Start-Sleep -Seconds 5
             $shift = ($s * 0.025) % 1.0
 
             $bmp = [System.Drawing.Bitmap]::new($w, $h)
             $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.SmoothingMode = 'AntiAlias'
-            $g.TextRenderingHint = 'AntiAlias'
+            $g.SmoothingMode = 'HighQuality'
+            $g.TextRenderingHint = 'AntiAliasGridFit'
 
             $rect = [System.Drawing.Rectangle]::new(0, 0, $w, $h)
-            $c1 = [System.Drawing.Color]::FromArgb(20, 8, 40)
-            $c2 = [System.Drawing.Color]::FromArgb(110, 40, 180)
-            $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
-            $g.FillRectangle($brush, $rect)
+            $c1 = [System.Drawing.Color]::FromArgb(10, 6, 24)
+            $c2 = [System.Drawing.Color]::FromArgb(36, 14, 72)
+            $bgBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 35.0)
+            $g.FillRectangle($bgBrush, $rect)
 
-            $font = [System.Drawing.Font]::new('Segoe UI', 84, ([System.Drawing.FontStyle]::Bold))
-            $sf = [System.Drawing.StringFormat]::new()
-            $sf.Alignment = 'Center'
-            $sf.LineAlignment = 'Center'
-            $box = [System.Drawing.RectangleF]::new(0, 0, $w, $h)
-            $measured = $g.MeasureString($text, $font, $box.Size, $sf)
+            $glowPath1 = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $glowPath1.AddEllipse(-200, -150, 900, 900)
+            $pgb1 = [System.Drawing.Drawing2D.PathGradientBrush]::new($glowPath1)
+            $pgb1.CenterColor = [System.Drawing.Color]::FromArgb(85, 130, 50, 255)
+            $pgb1.SurroundColors = [System.Drawing.Color[]]@([System.Drawing.Color]::Transparent)
+            $g.FillPath($pgb1, $glowPath1)
 
-            $textRect = [System.Drawing.RectangleF]::new(
-              (($w - $measured.Width) / 2),
-              (($h - $measured.Height) / 2),
-              ([Math]::Max($measured.Width, 10.0)),
-              ([Math]::Max($measured.Height, 10.0))
+            $glowPath2 = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $glowPath2.AddEllipse($w - 750, $h - 650, 950, 950)
+            $pgb2 = [System.Drawing.Drawing2D.PathGradientBrush]::new($glowPath2)
+            $pgb2.CenterColor = [System.Drawing.Color]::FromArgb(75, 0, 190, 255)
+            $pgb2.SurroundColors = [System.Drawing.Color[]]@([System.Drawing.Color]::Transparent)
+            $g.FillPath($pgb2, $glowPath2)
+
+            $gridPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(16, 255, 255, 255), 1)
+            for ($gx = 0; $gx -lt $w; $gx += 60) { $g.DrawLine($gridPen, $gx, 0, $gx, $h) }
+            for ($gy = 0; $gy -lt $h; $gy += 60) { $g.DrawLine($gridPen, 0, $gy, $w, $gy) }
+
+            $cardRect = [System.Drawing.RectangleF]::new(240, 355, 1440, 340)
+            $cardPath = Add-RoundedRectPath -Rect $cardRect -Radius 34
+            $cardFill = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(135, 16, 12, 34))
+            $g.FillPath($cardFill, $cardPath)
+
+            $borderBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+              [System.Drawing.PointF]::new($cardRect.Left, $cardRect.Top),
+              [System.Drawing.PointF]::new($cardRect.Right, $cardRect.Bottom),
+              [System.Drawing.Color]::Cyan,
+              [System.Drawing.Color]::Magenta
             )
-
-            $p1 = [System.Drawing.PointF]::new($textRect.Left, $textRect.Top)
-            $p2 = [System.Drawing.PointF]::new([Math]::Max($textRect.Right, $textRect.Left + 10.0), $textRect.Top)
-            $rainbowBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-              $p1,
-              $p2,
-              [System.Drawing.Color]::Red,
-              [System.Drawing.Color]::Violet
-            )
-
             $pairs = for ($k = 0; $k -lt 7; $k++) {
               $val = ($basePos[$k] + $shift) % 1.0
               [PSCustomObject]@{ Pos = [single]$val; Col = $baseColors[$k] }
@@ -392,31 +448,41 @@ jobs:
             $blend = [System.Drawing.Drawing2D.ColorBlend]::new(9)
             $cols = New-Object 'System.Drawing.Color[]' 9
             $poss = New-Object 'single[]' 9
-            $cols[0] = ($sorted[-1]).Col
-            $poss[0] = [single]0.0
+            $cols[0] = ($sorted[-1]).Col; $poss[0] = [single]0.0
             for ($k = 0; $k -lt 7; $k++) {
               $cols[$k + 1] = $sorted[$k].Col
               $poss[$k + 1] = [single][Math]::Min([Math]::Max($sorted[$k].Pos, 0.001), 0.999)
             }
-            $cols[8] = ($sorted[0]).Col
-            $poss[8] = [single]1.0
+            $cols[8] = ($sorted[0]).Col; $poss[8] = [single]1.0
             $blend.Colors = $cols
             $blend.Positions = $poss
-            $rainbowBrush.InterpolationColors = $blend
+            $borderBrush.InterpolationColors = $blend
 
-            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(140, 10, 5, 20))
-            $shadowBox = [System.Drawing.RectangleF]::new(0, 4, $w, $h)
+            $borderPen = [System.Drawing.Pen]::new($borderBrush, 3.5)
+            $g.DrawPath($borderPen, $cardPath)
+
+            $font = [System.Drawing.Font]::new('Segoe UI', 76, ([System.Drawing.FontStyle]::Bold))
+            $sf = [System.Drawing.StringFormat]::new()
+            $sf.Alignment = 'Center'
+            $sf.LineAlignment = 'Center'
+            $titleBox = [System.Drawing.RectangleF]::new(240, 385, 1440, 180)
+            $shadowBox = [System.Drawing.RectangleF]::new(240, 391, 1440, 180)
+            $shadowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(180, 5, 2, 15))
+
             $g.DrawString($text, $font, $shadowBrush, $shadowBox, $sf)
-            $g.DrawString($text, $font, $rainbowBrush, $box, $sf)
+            $g.DrawString($text, $font, $borderBrush, $titleBox, $sf)
+
+            $subFont = [System.Drawing.Font]::new('Segoe UI Semibold', 22, ([System.Drawing.FontStyle]::Bold))
+            $subBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(215, 210, 220, 255))
+            $subBox = [System.Drawing.RectangleF]::new(240, 565, 1440, 75)
+            $g.DrawString($subText, $subFont, $subBrush, $subBox, $sf)
 
             $bmp.Save($wall, [System.Drawing.Imaging.ImageFormat]::Jpeg)
 
-            $rainbowBrush.Dispose()
-            $shadowBrush.Dispose()
-            $brush.Dispose()
-            $font.Dispose()
-            $g.Dispose()
-            $bmp.Dispose()
+            $subBrush.Dispose(); $subFont.Dispose(); $shadowBrush.Dispose(); $font.Dispose()
+            $borderPen.Dispose(); $borderBrush.Dispose(); $cardFill.Dispose(); $cardPath.Dispose()
+            $gridPen.Dispose(); $pgb2.Dispose(); $glowPath2.Dispose(); $pgb1.Dispose(); $glowPath1.Dispose()
+            $bgBrush.Dispose(); $g.Dispose(); $bmp.Dispose()
 
             $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
           }
