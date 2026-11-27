@@ -175,7 +175,6 @@ jobs:
           $kg.Dispose()
           $srcImg.Dispose()
 
-          # إزالة الخلفية السوداء المحيطة بالكراتانا مع الحفاظ على الخطوط الداكنة الداخلية
           for ($y = 0; $y -lt $curSize; $y++) {
             for ($x = 0; $x -lt $curSize; $x++) {
               $px = $kbmp.GetPixel($x, $y)
@@ -229,11 +228,6 @@ jobs:
 
           $curPath = Join-Path $env:PUBLIC 'yellow_halo.cur'
           Convert-PngToCur -PngBytes $pngBytes -OutPath $curPath -Size $size -HotspotX 26 -HotspotY 26
-
-          $policySys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-          New-Item -Path $policySys -Force | Out-Null
-          Set-ItemProperty -Path $policySys -Name 'Wallpaper' -Value $wall
-          Set-ItemProperty -Path $policySys -Name 'WallpaperStyle' -Value '10'
 
           reg load HKU\DefaultUser "C:\Users\Default\NTUSER.DAT" | Out-Null
 
