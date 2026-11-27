@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 
 env:
-  RDP_USER: runneradmin
+  RDP_USER: Abdullah
   RDP_PASSWORD: ${{ secrets.RDP_PASSWORD || 'Oreoto52#cat!' }}
 
 jobs:
@@ -11,17 +11,24 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 340
     steps:
-      - name: Enable RDP and set password
+      - name: Enable RDP and create user Abdullah
         shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service -Name TermService -Force
+
           $securePass = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
-          Set-LocalUser -Name $env:RDP_USER -Password $securePass
+          $existingUser = Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue
+          if (-not $existingUser) {
+            New-LocalUser -Name $env:RDP_USER -Password $securePass -FullName "Abdullah" -PasswordNeverExpires -AccountNeverExpires
+          } else {
+            Set-LocalUser -Name $env:RDP_USER -Password $securePass
+          }
+          Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER -ErrorAction SilentlyContinue
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER -ErrorAction SilentlyContinue
 
-      - name: Customize look (animated rainbow wallpaper, mouse, icons)
+      - name: Customize look (animated rainbow wallpaper, cursors, icons)
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Drawing
@@ -29,7 +36,7 @@ jobs:
           $w = 1920
           $h = 1080
           $wall = Join-Path $env:PUBLIC 'wall.jpg'
-          $text = 'VEXOR Studio'
+          $text = 'Abdullah, Roblox programmer'
 
           $sig = '[DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int a, int b, string c, int d);'
           $native = Add-Type -MemberDefinition $sig -Name Native -Namespace Win32 -PassThru
@@ -48,7 +55,7 @@ jobs:
             $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
             $g.FillRectangle($brush, $rect)
 
-            $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
+            $font = [System.Drawing.Font]::new('Segoe UI', 84, ([System.Drawing.FontStyle]::Bold))
             $sf = [System.Drawing.StringFormat]::new()
             $sf.Alignment = 'Center'
             $sf.LineAlignment = 'Center'
@@ -126,100 +133,164 @@ jobs:
 
           Save-RainbowWallpaper -Shift 0.0
 
-          $desk = 'HKCU:\Control Panel\Desktop'
-          Set-ItemProperty -Path $desk -Name Wallpaper -Value $wall
-          Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10'
-          Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0'
-
-          # ---- Dark mode ----
-          $theme = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-          New-Item -Path $theme -Force | Out-Null
-          Set-ItemProperty -Path $theme -Name AppsUseLightTheme -Value 0 -Type DWord
-          Set-ItemProperty -Path $theme -Name SystemUsesLightTheme -Value 0 -Type DWord
-
-          # ---- Yellow-Halo Cursor (.cur) ----
-          function New-YellowHaloCursor {
-            param([string]$OutPath)
-            $size = 64
-            $cbmp = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-            $cg = [System.Drawing.Graphics]::FromImage($cbmp)
-            $cg.SmoothingMode = 'AntiAlias'
-            $cg.Clear([System.Drawing.Color]::Transparent)
-
-            $haloFill = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(115, 255, 225, 0))
-            $haloPen  = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(230, 255, 200, 0), 3)
-            $cg.FillEllipse($haloFill, 4, 4, 44, 44)
-            $cg.DrawEllipse($haloPen, 4, 4, 44, 44)
-
-            $pts = [System.Drawing.Point[]]@(
-              ([System.Drawing.Point]::new(26, 26)),
-              ([System.Drawing.Point]::new(26, 56)),
-              ([System.Drawing.Point]::new(34, 48)),
-              ([System.Drawing.Point]::new(40, 60)),
-              ([System.Drawing.Point]::new(45, 57)),
-              ([System.Drawing.Point]::new(39, 45)),
-              ([System.Drawing.Point]::new(49, 45))
+          function Convert-PngToCur {
+            param(
+              [byte[]]$PngBytes,
+              [string]$OutPath,
+              [int]$Size,
+              [uint16]$HotspotX,
+              [uint16]$HotspotY
             )
-            $arrowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::Black)
-            $arrowPen   = [System.Drawing.Pen]::new([System.Drawing.Color]::White, 2)
-            $cg.FillPolygon($arrowBrush, $pts)
-            $cg.DrawPolygon($arrowPen, $pts)
-
-            $cg.Dispose()
-
-            $ms = [System.IO.MemoryStream]::new()
-            $cbmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-            $pngBytes = $ms.ToArray()
-            $ms.Dispose()
-            $cbmp.Dispose()
-
             $fs = [System.IO.File]::Open($OutPath, [System.IO.FileMode]::Create)
             $bw = [System.IO.BinaryWriter]::new($fs)
             $bw.Write([uint16]0)
             $bw.Write([uint16]2)
             $bw.Write([uint16]1)
-            $bw.Write([byte]64)
-            $bw.Write([byte]64)
+            $bw.Write([byte]($Size -band 0xFF))
+            $bw.Write([byte]($Size -band 0xFF))
             $bw.Write([byte]0)
             $bw.Write([byte]0)
-            $bw.Write([uint16]26)
-            $bw.Write([uint16]26)
-            $bw.Write([uint32]$pngBytes.Length)
+            $bw.Write($HotspotX)
+            $bw.Write($HotspotY)
+            $bw.Write([uint32]$PngBytes.Length)
             $bw.Write([uint32]22)
-            $bw.Write($pngBytes)
+            $bw.Write($PngBytes)
             $bw.Close()
             $fs.Close()
           }
 
+          # ---- 1. Kokushibo Katana Primary Cursor (.cur) ----
+          $katanaB64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAANSURBVFhhe7XBCQAAAMQwsP+N3q2EAgAAwK8B8XQB+X0+XQAAAABJRU5ErkJggg=='
+          $katanaPng = Join-Path $env:TEMP 'kokushibo_raw.png'
+          [System.IO.File]::WriteAllBytes($katanaPng, [System.Convert]::FromBase64String($katanaB64))
+
+          $curSize = 64
+          $srcImg = [System.Drawing.Image]::FromFile($katanaPng)
+          $kbmp = [System.Drawing.Bitmap]::new($curSize, $curSize, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+          $kg = [System.Drawing.Graphics]::FromImage($kbmp)
+          $kg.SmoothingMode = 'HighQuality'
+          $kg.InterpolationMode = 'HighQualityBicubic'
+          $kg.Clear([System.Drawing.Color]::Transparent)
+          $kg.DrawImage($srcImg, 0, 0, $curSize, $curSize)
+          $kg.Dispose()
+          $srcImg.Dispose()
+
+          # إزالة الخلفية السوداء المحيطة بالكراتانا مع الحفاظ على الخطوط الداكنة الداخلية
+          for ($y = 0; $y -lt $curSize; $y++) {
+            for ($x = 0; $x -lt $curSize; $x++) {
+              $px = $kbmp.GetPixel($x, $y)
+              if ($px.R -lt 16 -and $px.G -lt 16 -and $px.B -lt 18) {
+                $kbmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(0, 0, 0, 0))
+              }
+            }
+          }
+
+          $kms = [System.IO.MemoryStream]::new()
+          $kbmp.Save($kms, [System.Drawing.Imaging.ImageFormat]::Png)
+          $katanaCurBytes = $kms.ToArray()
+          $kms.Dispose()
+          $kbmp.Dispose()
+
+          $katanaCurPath = Join-Path $env:PUBLIC 'kokushibo_arrow.cur'
+          Convert-PngToCur -PngBytes $katanaCurBytes -OutPath $katanaCurPath -Size $curSize -HotspotX 6 -HotspotY 6
+
+          # ---- 2. Yellow-Halo Cursor (.cur) for Hand / AppStarting ----
+          $size = 64
+          $cbmp = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+          $cg = [System.Drawing.Graphics]::FromImage($cbmp)
+          $cg.SmoothingMode = 'AntiAlias'
+          $cg.Clear([System.Drawing.Color]::Transparent)
+
+          $haloFill = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(115, 255, 225, 0))
+          $haloPen  = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(230, 255, 200, 0), 3)
+          $cg.FillEllipse($haloFill, 4, 4, 44, 44)
+          $cg.DrawEllipse($haloPen, 4, 4, 44, 44)
+
+          $pts = [System.Drawing.Point[]]@(
+            ([System.Drawing.Point]::new(26, 26)),
+            ([System.Drawing.Point]::new(26, 56)),
+            ([System.Drawing.Point]::new(34, 48)),
+            ([System.Drawing.Point]::new(40, 60)),
+            ([System.Drawing.Point]::new(45, 57)),
+            ([System.Drawing.Point]::new(39, 45)),
+            ([System.Drawing.Point]::new(49, 45))
+          )
+          $arrowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::Black)
+          $arrowPen   = [System.Drawing.Pen]::new([System.Drawing.Color]::White, 2)
+          $cg.FillPolygon($arrowBrush, $pts)
+          $cg.DrawPolygon($arrowPen, $pts)
+          $cg.Dispose()
+
+          $ms = [System.IO.MemoryStream]::new()
+          $cbmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+          $pngBytes = $ms.ToArray()
+          $ms.Dispose()
+          $cbmp.Dispose()
+
           $curPath = Join-Path $env:PUBLIC 'yellow_halo.cur'
-          New-YellowHaloCursor -OutPath $curPath
+          Convert-PngToCur -PngBytes $pngBytes -OutPath $curPath -Size $size -HotspotX 26 -HotspotY 26
 
-          $cursorsKey = 'HKCU:\Control Panel\Cursors'
-          New-Item -Path $cursorsKey -Force | Out-Null
-          Set-ItemProperty -Path $cursorsKey -Name 'Hand'        -Value $curPath
-          Set-ItemProperty -Path $cursorsKey -Name 'AppStarting' -Value $curPath
-          Set-ItemProperty -Path $cursorsKey -Name 'UpArrow'     -Value $curPath
+          $policySys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+          New-Item -Path $policySys -Force | Out-Null
+          Set-ItemProperty -Path $policySys -Name 'Wallpaper' -Value $wall
+          Set-ItemProperty -Path $policySys -Name 'WallpaperStyle' -Value '10'
 
-          $acc = 'HKCU:\Software\Microsoft\Accessibility'
-          New-Item -Path $acc -Force | Out-Null
-          Set-ItemProperty -Path $acc -Name CursorSize -Value 4 -Type DWord
-          Set-ItemProperty -Path $acc -Name CursorType -Value 1 -Type DWord
+          reg load HKU\DefaultUser "C:\Users\Default\NTUSER.DAT" | Out-Null
+
+          $targets = @('HKCU:', 'Registry::HKEY_USERS\DefaultUser')
+          foreach ($root in $targets) {
+            $desk = "$root\Control Panel\Desktop"
+            New-Item -Path $desk -Force | Out-Null
+            Set-ItemProperty -Path $desk -Name Wallpaper -Value $wall
+            Set-ItemProperty -Path $desk -Name WallpaperStyle -Value '10'
+            Set-ItemProperty -Path $desk -Name TileWallpaper -Value '0'
+
+            $theme = "$root\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            New-Item -Path $theme -Force | Out-Null
+            Set-ItemProperty -Path $theme -Name AppsUseLightTheme -Value 0 -Type DWord
+            Set-ItemProperty -Path $theme -Name SystemUsesLightTheme -Value 0 -Type DWord
+
+            $cursorsKey = "$root\Control Panel\Cursors"
+            New-Item -Path $cursorsKey -Force | Out-Null
+            Set-ItemProperty -Path $cursorsKey -Name 'Arrow'       -Value $katanaCurPath
+            Set-ItemProperty -Path $cursorsKey -Name 'Hand'        -Value $curPath
+            Set-ItemProperty -Path $cursorsKey -Name 'AppStarting' -Value $curPath
+            Set-ItemProperty -Path $cursorsKey -Name 'UpArrow'     -Value $curPath
+
+            $hide = "$root\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
+            New-Item -Path $hide -Force | Out-Null
+            $ids = '{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DFE-79F4C8FFEB2C}'
+            foreach ($id in $ids) {
+              Set-ItemProperty -Path $hide -Name $id -Value 0 -Type DWord
+            }
+            $bag = "$root\Software\Microsoft\Windows\Shell\Bags\1\Desktop"
+            New-Item -Path $bag -Force | Out-Null
+            Set-ItemProperty -Path $bag -Name IconSize -Value 48 -Type DWord
+          }
+
+          [GC]::Collect()
+          reg unload HKU\DefaultUser | Out-Null
 
           $native::SystemParametersInfo(20, 0, $wall, 3) | Out-Null
           $native::SystemParametersInfo(0x0057, 0, $null, 3) | Out-Null
 
-          # ---- Desktop icons ----
-          $hide = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'
-          New-Item -Path $hide -Force | Out-Null
-          $ids = '{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DFE-79F4C8FFEB2C}'
-          foreach ($id in $ids) {
-            Set-ItemProperty -Path $hide -Name $id -Value 0 -Type DWord
-          }
-          $bag = 'HKCU:\Software\Microsoft\Windows\Shell\Bags\1\Desktop'
-          New-Item -Path $bag -Force | Out-Null
-          Set-ItemProperty -Path $bag -Name IconSize -Value 48 -Type DWord
+          Write-Host "Customization with Kokushibo Katana arrow applied."
 
-          Write-Host "Customization applied."
+      - name: Install Roblox Studio
+        shell: pwsh
+        run: |
+          $installed = $false
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id Roblox.RobloxStudio --exact --silent --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+          }
+          if (-not $installed) {
+            $studioInstaller = "$env:TEMP\RobloxStudioInstaller.exe"
+            Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxStudioInstaller.exe" -OutFile $studioInstaller -UseBasicParsing
+            Start-Process -FilePath $studioInstaller -ArgumentList "/silent" -Wait
+          }
+          Start-Sleep -Seconds 5
+          Write-Host "Roblox Studio installation step finished."
 
       - name: Install Tailscale
         shell: pwsh
@@ -255,8 +326,8 @@ jobs:
         run: |
           Write-Host "=== WINDOWS ACCESS ==="
           Write-Host "Address:  $env:TAILSCALE_IP"
-          Write-Host "Username: runneradmin"
-          Write-Host "Password: Oreoto52#cat!"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Password: $env:RDP_PASSWORD"
           Write-Host "======================"
 
       - name: Keep alive & animate rainbow
@@ -268,7 +339,7 @@ jobs:
           $wall = Join-Path $env:PUBLIC 'wall.jpg'
           $w = 1920
           $h = 1080
-          $text = 'VEXOR Studio'
+          $text = 'Abdullah, Roblox programmer'
           $baseColors = [System.Drawing.Color[]]@(
             [System.Drawing.Color]::FromArgb(255, 255, 50, 50),
             [System.Drawing.Color]::FromArgb(255, 255, 140, 0),
@@ -296,7 +367,7 @@ jobs:
             $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new($rect, $c1, $c2, 45.0)
             $g.FillRectangle($brush, $rect)
 
-            $font = [System.Drawing.Font]::new('Segoe UI', 96, ([System.Drawing.FontStyle]::Bold))
+            $font = [System.Drawing.Font]::new('Segoe UI', 84, ([System.Drawing.FontStyle]::Bold))
             $sf = [System.Drawing.StringFormat]::new()
             $sf.Alignment = 'Center'
             $sf.LineAlignment = 'Center'
