@@ -9,7 +9,7 @@ env:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 6000000000000000000
+    timeout-minutes: 350
     steps:
       - name: Enable RDP and create user Abdullah
         shell: pwsh
